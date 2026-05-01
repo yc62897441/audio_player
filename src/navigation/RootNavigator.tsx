@@ -5,32 +5,39 @@ import {
     Play as PlayIcon,
     Settings as SettingsIcon,
 } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import LibraryScreen from "../screens/LibraryScreen";
 import PermissionScreen from "../screens/PermissionScreen";
 import PlayerScreen from "../screens/PlayerScreen";
 import SettingsScreen from "../screens/SettingsScreen";
+import { colors } from "../theme/colors";
 
 import type { RootTabParamList } from "./types";
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 
-const PRIMARY_COLOR = "#2663EB";
-const INACTIVE_COLOR = "#9CA3AF";
+const TAB_BAR_CONTENT_HEIGHT = 60;
+const TAB_BAR_PADDING_BOTTOM = 8;
 
 export function RootNavigator() {
+    // 讀裝置 safe area:Android 手勢列、iOS home indicator 高度都從這裡來,
+    // 加進 tabBar 的高度與 padding,避免按鈕被系統手勢區覆蓋。
+    const insets = useSafeAreaInsets();
+
     return (
         <Tab.Navigator
             initialRouteName="Library"
             screenOptions={{
                 headerShown: false,
-                tabBarActiveTintColor: PRIMARY_COLOR,
-                tabBarInactiveTintColor: INACTIVE_COLOR,
+                tabBarActiveTintColor: colors.primary,
+                tabBarInactiveTintColor: colors.textMuted,
                 tabBarLabelStyle: { fontSize: 12 },
                 tabBarStyle: {
-                    height: 60,
+                    height: TAB_BAR_CONTENT_HEIGHT + insets.bottom,
                     paddingTop: 6,
-                    paddingBottom: 8,
+                    paddingBottom: TAB_BAR_PADDING_BOTTOM + insets.bottom,
+                    borderTopColor: colors.border,
                 },
             }}
         >

@@ -1,10 +1,14 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# dependencies
+# Dependencies
 node_modules/
+.pnp/
+.pnp.js
+.yarn/install-state.gz
 
 # Expo
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
@@ -18,24 +22,56 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# Generated native folders (Managed Workflow)
+/ios
+/android
+
 # Metro
 .metro-health-check*
 
-# debug
+# EAS / Builds
+*.ipa
+*.apk
+*.aab
+build/
+
+# Debug & logs
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
 
-# macOS
-.DS_Store
-*.pem
+# Test coverage
+coverage/
+.nyc_output/
 
-# local env files
-.env*.local
-
-# typescript
+# TypeScript
 *.tsbuildinfo
 
-# generated native folders
-/ios
-/android
+# Environment variables
+.env
+.env.*
+!.env.example
+.env*.local
+
+# IDE / Editor
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.pem
+
+# Husky internal
+.husky/_/
+
+# Claude Code local settings
+.claude/settings.local.json

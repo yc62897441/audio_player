@@ -3,7 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PermissionScreen() {
     return (
-        <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+        <SafeAreaView style={styles.container} edges={["top"]}>
             <ScrollView
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}

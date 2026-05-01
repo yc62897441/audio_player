@@ -13,7 +13,10 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -28,7 +31,15 @@
     },
     "plugins": [
       "expo-video",
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "需要存取你的媒體庫,以讀取裝置中的影片與音樂檔案進行播放。",
+          "savePhotosPermission": "允許 App 將檔案儲存到你的媒體庫。",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
     ]
   }
 }

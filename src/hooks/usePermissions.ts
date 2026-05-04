@@ -4,7 +4,9 @@ import { useEffect } from "react";
 import { useLibraryStore } from "../stores/libraryStore";
 
 export function useMediaPermissions() {
-    const [response, requestPermission] = MediaLibrary.usePermissions();
+    const [response, requestPermission] = MediaLibrary.usePermissions({
+        granularPermissions: ["audio", "video"],
+    });
     const setHasPermission = useLibraryStore((s) => s.setHasPermission);
 
     useEffect(() => {

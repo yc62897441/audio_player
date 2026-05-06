@@ -51,7 +51,7 @@ export async function loadAlbums(): Promise<MediaAlbum[]> {
             });
         }
     }
-    result.sort((a, b) => b.mediaCount - a.mediaCount);
+    result.sort((a, b) => a.title.localeCompare(b.title, "zh-Hant"));
     return result;
 }
 

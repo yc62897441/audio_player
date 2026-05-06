@@ -98,10 +98,7 @@ export default function LibraryScreen() {
 
             <View style={styles.scroll}>
                 {activeTab === "recent" ? (
-                    <RecentTab
-                        entries={recentEntries}
-                        onPlay={handlePlay}
-                    />
+                    <RecentTab entries={recentEntries} onPlay={handlePlay} />
                 ) : (
                     <AlbumsTab
                         hasPermission={hasPermission}
@@ -155,9 +152,7 @@ function RecentTab({ entries, onPlay }: RecentTabProps) {
     if (entries.length === 0) {
         return (
             <View style={styles.centeredContent}>
-                <Text style={styles.placeholder}>
-                    尚無播放紀錄
-                </Text>
+                <Text style={styles.placeholder}>尚無播放紀錄</Text>
                 <Text style={styles.placeholderSub}>
                     請至「資料夾」分頁挑選檔案播放
                 </Text>
@@ -324,9 +319,7 @@ function AlbumFilesContent({
     if (files.length === 0) {
         return (
             <View style={styles.centeredContent}>
-                <Text style={styles.placeholder}>
-                    這個資料夾沒有影片或音樂
-                </Text>
+                <Text style={styles.placeholder}>這個資料夾沒有影片或音樂</Text>
             </View>
         );
     }

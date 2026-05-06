@@ -2,6 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import {
     ActivityIndicator,
     FlatList,
+    Image,
     Pressable,
     StyleSheet,
     Text,
@@ -11,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useMediaLibrary } from "../hooks/useMediaLibrary";
 import { useMediaPermissions } from "../hooks/usePermissions";
+import { useVideoThumbnail } from "../hooks/useVideoThumbnail";
 import { useLibraryStore } from "../stores/libraryStore";
 import type { LibraryTab, MediaAlbum, MediaFile } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
@@ -359,11 +361,34 @@ function FileRow({ file, sub, onPress }: FileRowProps) {
             ]}
             onPress={onPress}
         >
-            <Text style={styles.fileName} numberOfLines={1}>
-                {file.type === "video" ? "🎬" : "🎵"} {file.filename}
-            </Text>
-            <Text style={styles.fileMeta}>{sub}</Text>
+            <FileThumbnail file={file} />
+            <View style={styles.fileTextCol}>
+                <Text style={styles.fileName} numberOfLines={1}>
+                    {file.filename}
+                </Text>
+                <Text style={styles.fileMeta}>{sub}</Text>
+            </View>
         </Pressable>
+    );
+}
+
+function FileThumbnail({ file }: { file: MediaFile }) {
+    const isVideo = file.type === "video";
+    const thumbUri = useVideoThumbnail(file);
+
+    if (isVideo && thumbUri) {
+        return (
+            <Image
+                source={{ uri: thumbUri }}
+                style={styles.thumbnail}
+                resizeMode="cover"
+            />
+        );
+    }
+    return (
+        <View style={styles.thumbnailPlaceholder}>
+            <Text style={styles.thumbnailIcon}>{isVideo ? "🎬" : "🎵"}</Text>
+        </View>
     );
 }
 
@@ -447,11 +472,35 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     fileItem: {
-        paddingVertical: 14,
+        paddingVertical: 12,
         paddingHorizontal: 20,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
     },
     fileItemPressed: {
         backgroundColor: "#F3F4F6",
+    },
+    thumbnail: {
+        width: 64,
+        height: 40,
+        borderRadius: 4,
+        backgroundColor: "#000000",
+    },
+    thumbnailPlaceholder: {
+        width: 64,
+        height: 40,
+        borderRadius: 4,
+        backgroundColor: "#F3F4F6",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    thumbnailIcon: {
+        fontSize: 18,
+    },
+    fileTextCol: {
+        flex: 1,
+        minWidth: 0,
     },
     fileName: {
         fontSize: 15,

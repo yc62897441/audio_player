@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SkipSettingsModal } from "../components/common/SkipSettingsModal";
 import { useSettingsStore } from "../stores/settingsStore";
 import { usePlayerStore } from "../stores/playerStore";
 import type { MediaFile } from "../stores/libraryStore";
@@ -35,6 +36,7 @@ interface ControlsProps {
     onSkipBy: (seconds: number) => void;
     onPrev: () => void;
     onNext: () => void;
+    onOpenSkipSettings: () => void;
 }
 
 function Controls({
@@ -45,6 +47,7 @@ function Controls({
     onSkipBy,
     onPrev,
     onNext,
+    onOpenSkipSettings,
 }: ControlsProps) {
     const skipBackLong = useSettingsStore((s) => s.skipBackLong);
     const skipBackShort = useSettingsStore((s) => s.skipBackShort);
@@ -64,12 +67,14 @@ function Controls({
                 direction="back"
                 long
                 onPress={() => onSkipBy(-skipBackLong)}
+                onLongPress={onOpenSkipSettings}
             />
             <SkipButton
                 seconds={skipBackShort}
                 direction="back"
                 long={false}
                 onPress={() => onSkipBy(-skipBackShort)}
+                onLongPress={onOpenSkipSettings}
             />
             <ControlButton
                 label={isPlaying ? "⏸" : "▶"}
@@ -81,12 +86,14 @@ function Controls({
                 direction="forward"
                 long={false}
                 onPress={() => onSkipBy(skipForwardShort)}
+                onLongPress={onOpenSkipSettings}
             />
             <SkipButton
                 seconds={skipForwardLong}
                 direction="forward"
                 long
                 onPress={() => onSkipBy(skipForwardLong)}
+                onLongPress={onOpenSkipSettings}
             />
             <ControlButton
                 label="⏭"
@@ -132,9 +139,16 @@ interface SkipButtonProps {
     direction: "back" | "forward";
     long: boolean;
     onPress: () => void;
+    onLongPress?: () => void;
 }
 
-function SkipButton({ seconds, direction, long, onPress }: SkipButtonProps) {
+function SkipButton({
+    seconds,
+    direction,
+    long,
+    onPress,
+    onLongPress,
+}: SkipButtonProps) {
     const Icon = long
         ? direction === "back"
             ? ChevronsLeft
@@ -149,6 +163,7 @@ function SkipButton({ seconds, direction, long, onPress }: SkipButtonProps) {
                 pressed && styles.skipButtonPressed,
             ]}
             onPress={onPress}
+            onLongPress={onLongPress}
         >
             <Icon color="#FFFFFF" size={20} />
             <Text style={styles.skipButtonNumber}>{seconds}</Text>
@@ -247,9 +262,10 @@ function Progress({ position, duration, onSeek }: ProgressProps) {
 
 interface AreaProps {
     file: MediaFile;
+    onOpenSkipSettings: () => void;
 }
 
-function VideoArea({ file }: AreaProps) {
+function VideoArea({ file, onOpenSkipSettings }: AreaProps) {
     const player = useVideoPlayer(file.uri, (p) => {
         p.loop = false;
         p.timeUpdateEventInterval = 0.5;
@@ -336,12 +352,13 @@ function VideoArea({ file }: AreaProps) {
                 onSkipBy={handleSkipBy}
                 onPrev={previous}
                 onNext={next}
+                onOpenSkipSettings={onOpenSkipSettings}
             />
         </View>
     );
 }
 
-function AudioArea({ file }: AreaProps) {
+function AudioArea({ file, onOpenSkipSettings }: AreaProps) {
     const player = useAudioPlayer({ uri: file.uri }, { updateInterval: 250 });
     const status = useAudioPlayerStatus(player);
 
@@ -418,6 +435,7 @@ function AudioArea({ file }: AreaProps) {
                 onSkipBy={handleSkipBy}
                 onPrev={previous}
                 onNext={next}
+                onOpenSkipSettings={onOpenSkipSettings}
             />
         </View>
     );
@@ -425,6 +443,7 @@ function AudioArea({ file }: AreaProps) {
 
 export default function PlayerScreen() {
     const currentFile = usePlayerStore((s) => s.currentFile);
+    const [skipModalVisible, setSkipModalVisible] = useState(false);
 
     return (
         <SafeAreaView style={styles.container} edges={["top"]}>
@@ -433,7 +452,10 @@ export default function PlayerScreen() {
             </View>
 
             {currentFile ? (
-                <VideoOrAudio file={currentFile} />
+                <VideoOrAudio
+                    file={currentFile}
+                    onOpenSkipSettings={() => setSkipModalVisible(true)}
+                />
             ) : (
                 <View style={styles.emptyBody}>
                     <Text style={styles.emptyText}>
@@ -444,15 +466,32 @@ export default function PlayerScreen() {
                     </Text>
                 </View>
             )}
+
+            <SkipSettingsModal
+                visible={skipModalVisible}
+                onClose={() => setSkipModalVisible(false)}
+            />
         </SafeAreaView>
     );
 }
 
-function VideoOrAudio({ file }: AreaProps) {
+function VideoOrAudio({ file, onOpenSkipSettings }: AreaProps) {
     if (file.type === "video") {
-        return <VideoArea key={file.id} file={file} />;
+        return (
+            <VideoArea
+                key={file.id}
+                file={file}
+                onOpenSkipSettings={onOpenSkipSettings}
+            />
+        );
     }
-    return <AudioArea key={file.id} file={file} />;
+    return (
+        <AudioArea
+            key={file.id}
+            file={file}
+            onOpenSkipSettings={onOpenSkipSettings}
+        />
+    );
 }
 
 const styles = StyleSheet.create({

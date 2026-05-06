@@ -1,6 +1,12 @@
 import { useEvent } from "expo";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { useVideoPlayer, VideoView } from "expo-video";
+import {
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+} from "lucide-react-native";
 import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -10,6 +16,7 @@ import { usePlayerStore } from "../stores/playerStore";
 import type { MediaFile } from "../stores/libraryStore";
 
 const ACTIVE_COLOR = "#2663EB";
+const SKIP_COLOR = "#F59E0B";
 const TEXT_COLOR = "#111827";
 const SUBTLE_COLOR = "#9CA3AF";
 
@@ -52,30 +59,33 @@ function Controls({
                 disabled={!canPrev}
                 onPress={onPrev}
             />
-            <ControlButton
-                label={`⏪ ${skipBackLong}`}
-                sublabel="倒轉"
+            <SkipButton
+                seconds={skipBackLong}
+                direction="back"
+                long
                 onPress={() => onSkipBy(-skipBackLong)}
             />
-            <ControlButton
-                label={`◀ ${skipBackShort}`}
-                sublabel="倒轉"
+            <SkipButton
+                seconds={skipBackShort}
+                direction="back"
+                long={false}
                 onPress={() => onSkipBy(-skipBackShort)}
             />
             <ControlButton
                 label={isPlaying ? "⏸" : "▶"}
                 sublabel={isPlaying ? "暫停" : "播放"}
-                primary
                 onPress={onPlayPause}
             />
-            <ControlButton
-                label={`▶ ${skipForwardShort}`}
-                sublabel="快進"
+            <SkipButton
+                seconds={skipForwardShort}
+                direction="forward"
+                long={false}
                 onPress={() => onSkipBy(skipForwardShort)}
             />
-            <ControlButton
-                label={`⏩ ${skipForwardLong}`}
-                sublabel="快進"
+            <SkipButton
+                seconds={skipForwardLong}
+                direction="forward"
+                long
                 onPress={() => onSkipBy(skipForwardLong)}
             />
             <ControlButton
@@ -91,7 +101,6 @@ function Controls({
 interface ControlButtonProps {
     label: string;
     sublabel: string;
-    primary?: boolean;
     disabled?: boolean;
     onPress: () => void;
 }
@@ -99,7 +108,6 @@ interface ControlButtonProps {
 function ControlButton({
     label,
     sublabel,
-    primary,
     disabled,
     onPress,
 }: ControlButtonProps) {
@@ -107,22 +115,43 @@ function ControlButton({
         <Pressable
             style={({ pressed }) => [
                 styles.controlButton,
-                primary && styles.controlButtonPrimary,
                 pressed && !disabled && styles.controlButtonPressed,
                 disabled && styles.controlButtonDisabled,
             ]}
             disabled={disabled}
             onPress={onPress}
         >
-            <Text
-                style={[
-                    styles.controlButtonLabel,
-                    primary && styles.controlButtonLabelPrimary,
-                ]}
-            >
-                {label}
-            </Text>
+            <Text style={styles.controlButtonLabel}>{label}</Text>
             <Text style={styles.controlButtonSublabel}>{sublabel}</Text>
+        </Pressable>
+    );
+}
+
+interface SkipButtonProps {
+    seconds: number;
+    direction: "back" | "forward";
+    long: boolean;
+    onPress: () => void;
+}
+
+function SkipButton({ seconds, direction, long, onPress }: SkipButtonProps) {
+    const Icon = long
+        ? direction === "back"
+            ? ChevronsLeft
+            : ChevronsRight
+        : direction === "back"
+          ? ChevronLeft
+          : ChevronRight;
+    return (
+        <Pressable
+            style={({ pressed }) => [
+                styles.skipButton,
+                pressed && styles.skipButtonPressed,
+            ]}
+            onPress={onPress}
+        >
+            <Icon color="#FFFFFF" size={20} />
+            <Text style={styles.skipButtonNumber}>{seconds}</Text>
         </Pressable>
     );
 }
@@ -460,9 +489,6 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         gap: 2,
     },
-    controlButtonPrimary: {
-        backgroundColor: ACTIVE_COLOR,
-    },
     controlButtonPressed: {
         opacity: 0.7,
     },
@@ -474,11 +500,25 @@ const styles = StyleSheet.create({
         color: TEXT_COLOR,
         fontWeight: "600",
     },
-    controlButtonLabelPrimary: {
-        color: "#FFFFFF",
-    },
     controlButtonSublabel: {
         fontSize: 9,
         color: SUBTLE_COLOR,
+    },
+    skipButton: {
+        width: 48,
+        aspectRatio: 1,
+        borderRadius: 8,
+        backgroundColor: SKIP_COLOR,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
+    },
+    skipButtonPressed: {
+        opacity: 0.7,
+    },
+    skipButtonNumber: {
+        color: "#FFFFFF",
+        fontSize: 12,
+        fontWeight: "600",
     },
 });

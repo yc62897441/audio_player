@@ -7,8 +7,8 @@ import {
     ChevronsLeft,
     ChevronsRight,
 } from "lucide-react-native";
-import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useSettingsStore } from "../stores/settingsStore";
@@ -159,23 +159,83 @@ function SkipButton({ seconds, direction, long, onPress }: SkipButtonProps) {
 interface ProgressProps {
     position: number;
     duration: number;
+    onSeek: (seconds: number) => void;
 }
 
-function Progress({ position, duration }: ProgressProps) {
-    const ratio = duration > 0 ? Math.min(1, position / duration) : 0;
+function Progress({ position, duration, onSeek }: ProgressProps) {
+    const widthRef = useRef(0);
+    const durationRef = useRef(duration);
+    const draggingPosRef = useRef<number | null>(null);
+    const [draggingPosition, setDraggingPosition] = useState<number | null>(
+        null,
+    );
+
+    useEffect(() => {
+        durationRef.current = duration;
+    }, [duration]);
+
+    const panResponder = useMemo(() => {
+        const xToTime = (x: number): number => {
+            const w = widthRef.current;
+            if (w <= 0) return 0;
+            const clamped = Math.max(0, Math.min(w, x));
+            return (clamped / w) * durationRef.current;
+        };
+        return PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: () => true,
+            onPanResponderGrant: (evt) => {
+                const t = xToTime(evt.nativeEvent.locationX);
+                draggingPosRef.current = t;
+                setDraggingPosition(t);
+            },
+            onPanResponderMove: (evt) => {
+                const t = xToTime(evt.nativeEvent.locationX);
+                draggingPosRef.current = t;
+                setDraggingPosition(t);
+            },
+            onPanResponderRelease: () => {
+                const final = draggingPosRef.current;
+                if (final !== null) {
+                    onSeek(final);
+                }
+                draggingPosRef.current = null;
+                setDraggingPosition(null);
+            },
+            onPanResponderTerminate: () => {
+                draggingPosRef.current = null;
+                setDraggingPosition(null);
+            },
+        });
+    }, [onSeek]);
+
+    const display = draggingPosition ?? position;
+    const ratio =
+        duration > 0 ? Math.min(1, Math.max(0, display / duration)) : 0;
+
     return (
         <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
+            <View
+                style={styles.progressTouchArea}
+                {...panResponder.panHandlers}
+            >
                 <View
-                    style={[
-                        styles.progressFill,
-                        { width: `${ratio * 100}%` },
-                    ]}
-                />
+                    style={styles.progressBar}
+                    onLayout={(e) => {
+                        widthRef.current = e.nativeEvent.layout.width;
+                    }}
+                >
+                    <View
+                        style={[
+                            styles.progressFill,
+                            { width: `${ratio * 100}%` },
+                        ]}
+                    />
+                </View>
             </View>
             <View style={styles.progressLabels}>
                 <Text style={styles.progressLabel}>
-                    {formatDuration(position)}
+                    {formatDuration(display)}
                 </Text>
                 <Text style={styles.progressLabel}>
                     {formatDuration(duration)}
@@ -232,6 +292,10 @@ function VideoArea({ file }: AreaProps) {
         player.seekBy(seconds);
     };
 
+    const handleSeek = (seconds: number) => {
+        player.currentTime = seconds;
+    };
+
     const handlePlayPause = () => {
         if (playingChange.isPlaying) {
             player.pause();
@@ -261,6 +325,7 @@ function VideoArea({ file }: AreaProps) {
             <Progress
                 position={timeUpdate.currentTime}
                 duration={player.duration}
+                onSeek={handleSeek}
             />
 
             <Controls
@@ -314,6 +379,10 @@ function AudioArea({ file }: AreaProps) {
         player.seekTo(target);
     };
 
+    const handleSeek = (seconds: number) => {
+        player.seekTo(seconds);
+    };
+
     const handlePlayPause = () => {
         if (status.playing) {
             player.pause();
@@ -338,6 +407,7 @@ function AudioArea({ file }: AreaProps) {
             <Progress
                 position={status.currentTime}
                 duration={status.duration}
+                onSeek={handleSeek}
             />
 
             <Controls
@@ -453,6 +523,10 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         paddingVertical: 8,
         gap: 6,
+    },
+    progressTouchArea: {
+        paddingVertical: 12,
+        justifyContent: "center",
     },
     progressBar: {
         height: 4,

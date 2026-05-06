@@ -1,6 +1,11 @@
 import { create } from "zustand";
 
 import type { MediaFile } from "./libraryStore";
+import { useRecentStore } from "./recentStore";
+
+const recordRecent = (file: MediaFile) => {
+    useRecentStore.getState().addPlay(file);
+};
 
 interface PlayerState {
     currentFile: MediaFile | null;
@@ -55,14 +60,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             Math.max(0, startIndex),
             playlist.length - 1,
         );
+        const startFile = playlist[safeIndex];
         set({
             playlist,
             currentIndex: safeIndex,
-            currentFile: playlist[safeIndex],
+            currentFile: startFile,
             position: 0,
-            duration: playlist[safeIndex].duration,
+            duration: startFile.duration,
             isPlaying: true,
         });
+        recordRecent(startFile);
     },
     playFile: (file, playlist) => {
         const nextPlaylist = playlist ?? get().playlist;
@@ -78,6 +85,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
                 duration: file.duration,
                 isPlaying: true,
             });
+            recordRecent(file);
             return;
         }
         const merged = [...nextPlaylist, file];
@@ -89,6 +97,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             duration: file.duration,
             isPlaying: true,
         });
+        recordRecent(file);
     },
     play: () => set({ isPlaying: true }),
     pause: () => set({ isPlaying: false }),
@@ -107,6 +116,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             duration: nextFile.duration,
             isPlaying: true,
         });
+        recordRecent(nextFile);
         return true;
     },
     previous: () => {
@@ -123,6 +133,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             duration: prevFile.duration,
             isPlaying: true,
         });
+        recordRecent(prevFile);
         return true;
     },
     goToIndex: (index) => {
@@ -138,6 +149,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             duration: file.duration,
             isPlaying: true,
         });
+        recordRecent(file);
         return true;
     },
     seekTo: (seconds) => {

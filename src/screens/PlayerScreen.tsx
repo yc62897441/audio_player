@@ -1,15 +1,23 @@
 import { useEvent } from "expo";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { useEffect } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+} from "lucide-react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { SkipSettingsModal } from "../components/common/SkipSettingsModal";
 import { useSettingsStore } from "../stores/settingsStore";
 import { usePlayerStore } from "../stores/playerStore";
 import type { MediaFile } from "../stores/libraryStore";
 
 const ACTIVE_COLOR = "#2663EB";
+const SKIP_COLOR = "#F59E0B";
 const TEXT_COLOR = "#111827";
 const SUBTLE_COLOR = "#9CA3AF";
 
@@ -28,6 +36,7 @@ interface ControlsProps {
     onSkipBy: (seconds: number) => void;
     onPrev: () => void;
     onNext: () => void;
+    onOpenSkipSettings: () => void;
 }
 
 function Controls({
@@ -38,6 +47,7 @@ function Controls({
     onSkipBy,
     onPrev,
     onNext,
+    onOpenSkipSettings,
 }: ControlsProps) {
     const skipBackLong = useSettingsStore((s) => s.skipBackLong);
     const skipBackShort = useSettingsStore((s) => s.skipBackShort);
@@ -52,31 +62,38 @@ function Controls({
                 disabled={!canPrev}
                 onPress={onPrev}
             />
-            <ControlButton
-                label={`⏪ ${skipBackLong}`}
-                sublabel="倒轉"
+            <SkipButton
+                seconds={skipBackLong}
+                direction="back"
+                long
                 onPress={() => onSkipBy(-skipBackLong)}
+                onLongPress={onOpenSkipSettings}
             />
-            <ControlButton
-                label={`◀ ${skipBackShort}`}
-                sublabel="倒轉"
+            <SkipButton
+                seconds={skipBackShort}
+                direction="back"
+                long={false}
                 onPress={() => onSkipBy(-skipBackShort)}
+                onLongPress={onOpenSkipSettings}
             />
             <ControlButton
                 label={isPlaying ? "⏸" : "▶"}
                 sublabel={isPlaying ? "暫停" : "播放"}
-                primary
                 onPress={onPlayPause}
             />
-            <ControlButton
-                label={`▶ ${skipForwardShort}`}
-                sublabel="快進"
+            <SkipButton
+                seconds={skipForwardShort}
+                direction="forward"
+                long={false}
                 onPress={() => onSkipBy(skipForwardShort)}
+                onLongPress={onOpenSkipSettings}
             />
-            <ControlButton
-                label={`⏩ ${skipForwardLong}`}
-                sublabel="快進"
+            <SkipButton
+                seconds={skipForwardLong}
+                direction="forward"
+                long
                 onPress={() => onSkipBy(skipForwardLong)}
+                onLongPress={onOpenSkipSettings}
             />
             <ControlButton
                 label="⏭"
@@ -91,7 +108,6 @@ function Controls({
 interface ControlButtonProps {
     label: string;
     sublabel: string;
-    primary?: boolean;
     disabled?: boolean;
     onPress: () => void;
 }
@@ -99,7 +115,6 @@ interface ControlButtonProps {
 function ControlButton({
     label,
     sublabel,
-    primary,
     disabled,
     onPress,
 }: ControlButtonProps) {
@@ -107,22 +122,51 @@ function ControlButton({
         <Pressable
             style={({ pressed }) => [
                 styles.controlButton,
-                primary && styles.controlButtonPrimary,
                 pressed && !disabled && styles.controlButtonPressed,
                 disabled && styles.controlButtonDisabled,
             ]}
             disabled={disabled}
             onPress={onPress}
         >
-            <Text
-                style={[
-                    styles.controlButtonLabel,
-                    primary && styles.controlButtonLabelPrimary,
-                ]}
-            >
-                {label}
-            </Text>
+            <Text style={styles.controlButtonLabel}>{label}</Text>
             <Text style={styles.controlButtonSublabel}>{sublabel}</Text>
+        </Pressable>
+    );
+}
+
+interface SkipButtonProps {
+    seconds: number;
+    direction: "back" | "forward";
+    long: boolean;
+    onPress: () => void;
+    onLongPress?: () => void;
+}
+
+function SkipButton({
+    seconds,
+    direction,
+    long,
+    onPress,
+    onLongPress,
+}: SkipButtonProps) {
+    const Icon = long
+        ? direction === "back"
+            ? ChevronsLeft
+            : ChevronsRight
+        : direction === "back"
+          ? ChevronLeft
+          : ChevronRight;
+    return (
+        <Pressable
+            style={({ pressed }) => [
+                styles.skipButton,
+                pressed && styles.skipButtonPressed,
+            ]}
+            onPress={onPress}
+            onLongPress={onLongPress}
+        >
+            <Icon color="#FFFFFF" size={20} />
+            <Text style={styles.skipButtonNumber}>{seconds}</Text>
         </Pressable>
     );
 }
@@ -130,23 +174,83 @@ function ControlButton({
 interface ProgressProps {
     position: number;
     duration: number;
+    onSeek: (seconds: number) => void;
 }
 
-function Progress({ position, duration }: ProgressProps) {
-    const ratio = duration > 0 ? Math.min(1, position / duration) : 0;
+function Progress({ position, duration, onSeek }: ProgressProps) {
+    const widthRef = useRef(0);
+    const durationRef = useRef(duration);
+    const draggingPosRef = useRef<number | null>(null);
+    const [draggingPosition, setDraggingPosition] = useState<number | null>(
+        null,
+    );
+
+    useEffect(() => {
+        durationRef.current = duration;
+    }, [duration]);
+
+    const panResponder = useMemo(() => {
+        const xToTime = (x: number): number => {
+            const w = widthRef.current;
+            if (w <= 0) return 0;
+            const clamped = Math.max(0, Math.min(w, x));
+            return (clamped / w) * durationRef.current;
+        };
+        return PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: () => true,
+            onPanResponderGrant: (evt) => {
+                const t = xToTime(evt.nativeEvent.locationX);
+                draggingPosRef.current = t;
+                setDraggingPosition(t);
+            },
+            onPanResponderMove: (evt) => {
+                const t = xToTime(evt.nativeEvent.locationX);
+                draggingPosRef.current = t;
+                setDraggingPosition(t);
+            },
+            onPanResponderRelease: () => {
+                const final = draggingPosRef.current;
+                if (final !== null) {
+                    onSeek(final);
+                }
+                draggingPosRef.current = null;
+                setDraggingPosition(null);
+            },
+            onPanResponderTerminate: () => {
+                draggingPosRef.current = null;
+                setDraggingPosition(null);
+            },
+        });
+    }, [onSeek]);
+
+    const display = draggingPosition ?? position;
+    const ratio =
+        duration > 0 ? Math.min(1, Math.max(0, display / duration)) : 0;
+
     return (
         <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
+            <View
+                style={styles.progressTouchArea}
+                {...panResponder.panHandlers}
+            >
                 <View
-                    style={[
-                        styles.progressFill,
-                        { width: `${ratio * 100}%` },
-                    ]}
-                />
+                    style={styles.progressBar}
+                    onLayout={(e) => {
+                        widthRef.current = e.nativeEvent.layout.width;
+                    }}
+                >
+                    <View
+                        style={[
+                            styles.progressFill,
+                            { width: `${ratio * 100}%` },
+                        ]}
+                    />
+                </View>
             </View>
             <View style={styles.progressLabels}>
                 <Text style={styles.progressLabel}>
-                    {formatDuration(position)}
+                    {formatDuration(display)}
                 </Text>
                 <Text style={styles.progressLabel}>
                     {formatDuration(duration)}
@@ -158,9 +262,10 @@ function Progress({ position, duration }: ProgressProps) {
 
 interface AreaProps {
     file: MediaFile;
+    onOpenSkipSettings: () => void;
 }
 
-function VideoArea({ file }: AreaProps) {
+function VideoArea({ file, onOpenSkipSettings }: AreaProps) {
     const player = useVideoPlayer(file.uri, (p) => {
         p.loop = false;
         p.timeUpdateEventInterval = 0.5;
@@ -203,6 +308,10 @@ function VideoArea({ file }: AreaProps) {
         player.seekBy(seconds);
     };
 
+    const handleSeek = (seconds: number) => {
+        player.currentTime = seconds;
+    };
+
     const handlePlayPause = () => {
         if (playingChange.isPlaying) {
             player.pause();
@@ -232,6 +341,7 @@ function VideoArea({ file }: AreaProps) {
             <Progress
                 position={timeUpdate.currentTime}
                 duration={player.duration}
+                onSeek={handleSeek}
             />
 
             <Controls
@@ -242,12 +352,13 @@ function VideoArea({ file }: AreaProps) {
                 onSkipBy={handleSkipBy}
                 onPrev={previous}
                 onNext={next}
+                onOpenSkipSettings={onOpenSkipSettings}
             />
         </View>
     );
 }
 
-function AudioArea({ file }: AreaProps) {
+function AudioArea({ file, onOpenSkipSettings }: AreaProps) {
     const player = useAudioPlayer({ uri: file.uri }, { updateInterval: 250 });
     const status = useAudioPlayerStatus(player);
 
@@ -285,6 +396,10 @@ function AudioArea({ file }: AreaProps) {
         player.seekTo(target);
     };
 
+    const handleSeek = (seconds: number) => {
+        player.seekTo(seconds);
+    };
+
     const handlePlayPause = () => {
         if (status.playing) {
             player.pause();
@@ -309,6 +424,7 @@ function AudioArea({ file }: AreaProps) {
             <Progress
                 position={status.currentTime}
                 duration={status.duration}
+                onSeek={handleSeek}
             />
 
             <Controls
@@ -319,6 +435,7 @@ function AudioArea({ file }: AreaProps) {
                 onSkipBy={handleSkipBy}
                 onPrev={previous}
                 onNext={next}
+                onOpenSkipSettings={onOpenSkipSettings}
             />
         </View>
     );
@@ -326,6 +443,7 @@ function AudioArea({ file }: AreaProps) {
 
 export default function PlayerScreen() {
     const currentFile = usePlayerStore((s) => s.currentFile);
+    const [skipModalVisible, setSkipModalVisible] = useState(false);
 
     return (
         <SafeAreaView style={styles.container} edges={["top"]}>
@@ -334,7 +452,10 @@ export default function PlayerScreen() {
             </View>
 
             {currentFile ? (
-                <VideoOrAudio file={currentFile} />
+                <VideoOrAudio
+                    file={currentFile}
+                    onOpenSkipSettings={() => setSkipModalVisible(true)}
+                />
             ) : (
                 <View style={styles.emptyBody}>
                     <Text style={styles.emptyText}>
@@ -345,15 +466,32 @@ export default function PlayerScreen() {
                     </Text>
                 </View>
             )}
+
+            <SkipSettingsModal
+                visible={skipModalVisible}
+                onClose={() => setSkipModalVisible(false)}
+            />
         </SafeAreaView>
     );
 }
 
-function VideoOrAudio({ file }: AreaProps) {
+function VideoOrAudio({ file, onOpenSkipSettings }: AreaProps) {
     if (file.type === "video") {
-        return <VideoArea key={file.id} file={file} />;
+        return (
+            <VideoArea
+                key={file.id}
+                file={file}
+                onOpenSkipSettings={onOpenSkipSettings}
+            />
+        );
     }
-    return <AudioArea key={file.id} file={file} />;
+    return (
+        <AudioArea
+            key={file.id}
+            file={file}
+            onOpenSkipSettings={onOpenSkipSettings}
+        />
+    );
 }
 
 const styles = StyleSheet.create({
@@ -425,6 +563,10 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         gap: 6,
     },
+    progressTouchArea: {
+        paddingVertical: 12,
+        justifyContent: "center",
+    },
     progressBar: {
         height: 4,
         backgroundColor: "#E5E7EB",
@@ -460,9 +602,6 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         gap: 2,
     },
-    controlButtonPrimary: {
-        backgroundColor: ACTIVE_COLOR,
-    },
     controlButtonPressed: {
         opacity: 0.7,
     },
@@ -474,11 +613,25 @@ const styles = StyleSheet.create({
         color: TEXT_COLOR,
         fontWeight: "600",
     },
-    controlButtonLabelPrimary: {
-        color: "#FFFFFF",
-    },
     controlButtonSublabel: {
         fontSize: 9,
         color: SUBTLE_COLOR,
+    },
+    skipButton: {
+        width: 48,
+        aspectRatio: 1,
+        borderRadius: 8,
+        backgroundColor: SKIP_COLOR,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
+    },
+    skipButtonPressed: {
+        opacity: 0.7,
+    },
+    skipButtonNumber: {
+        color: "#FFFFFF",
+        fontSize: 12,
+        fontWeight: "600",
     },
 });

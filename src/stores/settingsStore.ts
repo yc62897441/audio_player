@@ -16,7 +16,7 @@ export const DEFAULT_SKIP_SETTINGS: SkipSettings = {
     skipForwardLong: 30,
 };
 
-export const SKIP_SECONDS_RANGE = { min: 5, max: 120 } as const;
+export const SKIP_SECONDS_RANGE = { min: 1, max: 120 } as const;
 
 const SETTINGS_STORAGE_KEY = "media-player/settings";
 

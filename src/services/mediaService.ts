@@ -1,6 +1,6 @@
 import * as MediaLibrary from "expo-media-library";
 
-import type { MediaFile, MediaType } from "../stores/libraryStore";
+import type { MediaAlbum, MediaFile, MediaType } from "../stores/libraryStore";
 
 const PAGE_SIZE = 200;
 
@@ -29,12 +29,39 @@ function toMediaFile(asset: MediaLibrary.Asset): MediaFile {
     };
 }
 
-export async function loadAllMedia(): Promise<MediaFile[]> {
+export async function loadAlbums(): Promise<MediaAlbum[]> {
+    const rawAlbums = await MediaLibrary.getAlbumsAsync({
+        includeSmartAlbums: true,
+    });
+    const result: MediaAlbum[] = [];
+    for (const album of rawAlbums) {
+        const probe = await MediaLibrary.getAssetsAsync({
+            album: album.id,
+            mediaType: [
+                MediaLibrary.MediaType.video,
+                MediaLibrary.MediaType.audio,
+            ],
+            first: 1,
+        });
+        if (probe.totalCount > 0) {
+            result.push({
+                id: album.id,
+                title: album.title,
+                mediaCount: probe.totalCount,
+            });
+        }
+    }
+    result.sort((a, b) => a.title.localeCompare(b.title, "zh-Hant"));
+    return result;
+}
+
+export async function loadFilesInAlbum(albumId: string): Promise<MediaFile[]> {
     const all: MediaLibrary.Asset[] = [];
     let cursor: string | undefined;
     let hasNext = true;
     while (hasNext) {
-        const result = await MediaLibrary.getAssetsAsync({
+        const page = await MediaLibrary.getAssetsAsync({
+            album: albumId,
             mediaType: [
                 MediaLibrary.MediaType.video,
                 MediaLibrary.MediaType.audio,
@@ -43,9 +70,9 @@ export async function loadAllMedia(): Promise<MediaFile[]> {
             after: cursor,
             sortBy: [[MediaLibrary.SortBy.creationTime, false]],
         });
-        all.push(...result.assets);
-        cursor = result.endCursor;
-        hasNext = result.hasNextPage;
+        all.push(...page.assets);
+        cursor = page.endCursor;
+        hasNext = page.hasNextPage;
     }
     return all.map(toMediaFile);
 }

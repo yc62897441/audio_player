@@ -1,14 +1,12 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import {
     Library as LibraryIcon,
-    Lock as LockIcon,
     Play as PlayIcon,
     Settings as SettingsIcon,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import LibraryScreen from "../screens/LibraryScreen";
-import PermissionScreen from "../screens/PermissionScreen";
 import PlayerScreen from "../screens/PlayerScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import { colors } from "../theme/colors";
@@ -68,16 +66,6 @@ export function RootNavigator() {
                     title: "設定",
                     tabBarIcon: ({ color, size }) => (
                         <SettingsIcon color={color} size={size} />
-                    ),
-                }}
-            />
-            <Tab.Screen
-                name="Permission"
-                component={PermissionScreen}
-                options={{
-                    title: "權限",
-                    tabBarIcon: ({ color, size }) => (
-                        <LockIcon color={color} size={size} />
                     ),
                 }}
             />

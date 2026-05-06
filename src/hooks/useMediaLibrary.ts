@@ -1,56 +1,87 @@
 import { useCallback, useEffect } from "react";
 
-import { loadAllMedia } from "../services/mediaService";
+import { loadAlbums, loadFilesInAlbum } from "../services/mediaService";
+import type { MediaAlbum } from "../stores/libraryStore";
 import { useLibraryStore } from "../stores/libraryStore";
 
 export function useMediaLibrary() {
     const hasPermission = useLibraryStore((s) => s.hasPermission);
-    const setMediaFiles = useLibraryStore((s) => s.setMediaFiles);
-    const setLoading = useLibraryStore((s) => s.setLoading);
-    const setError = useLibraryStore((s) => s.setError);
+    const setAlbums = useLibraryStore((s) => s.setAlbums);
+    const setIsLoadingAlbums = useLibraryStore((s) => s.setIsLoadingAlbums);
+    const setAlbumsError = useLibraryStore((s) => s.setAlbumsError);
+    const setAlbumFiles = useLibraryStore((s) => s.setAlbumFiles);
+    const setIsLoadingAlbumFiles = useLibraryStore(
+        (s) => s.setIsLoadingAlbumFiles,
+    );
+    const setAlbumFilesError = useLibraryStore((s) => s.setAlbumFilesError);
 
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        setError(null);
+    const refreshAlbums = useCallback(async () => {
+        setIsLoadingAlbums(true);
+        setAlbumsError(null);
         try {
-            const files = await loadAllMedia();
-            setMediaFiles(files);
+            const albums = await loadAlbums();
+            setAlbums(albums);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "讀取媒體失敗");
+            setAlbumsError(
+                err instanceof Error ? err.message : "讀取資料夾失敗",
+            );
         } finally {
-            setLoading(false);
+            setIsLoadingAlbums(false);
         }
-    }, [setMediaFiles, setLoading, setError]);
+    }, [setAlbums, setIsLoadingAlbums, setAlbumsError]);
+
+    const openAlbum = useCallback(
+        async (album: MediaAlbum) => {
+            useLibraryStore.getState().selectAlbum(album);
+            setIsLoadingAlbumFiles(true);
+            setAlbumFilesError(null);
+            try {
+                const files = await loadFilesInAlbum(album.id);
+                setAlbumFiles(files);
+            } catch (err) {
+                setAlbumFilesError(
+                    err instanceof Error
+                        ? err.message
+                        : "讀取資料夾內檔案失敗",
+                );
+            } finally {
+                setIsLoadingAlbumFiles(false);
+            }
+        },
+        [setAlbumFiles, setIsLoadingAlbumFiles, setAlbumFilesError],
+    );
 
     useEffect(() => {
         if (!hasPermission) {
             return;
         }
         let cancelled = false;
-        setLoading(true);
-        setError(null);
-        loadAllMedia()
-            .then((files) => {
+        setIsLoadingAlbums(true);
+        setAlbumsError(null);
+        loadAlbums()
+            .then((albums) => {
                 if (!cancelled) {
-                    setMediaFiles(files);
+                    setAlbums(albums);
                 }
             })
             .catch((err: unknown) => {
                 if (!cancelled) {
-                    setError(
-                        err instanceof Error ? err.message : "讀取媒體失敗",
+                    setAlbumsError(
+                        err instanceof Error
+                            ? err.message
+                            : "讀取資料夾失敗",
                     );
                 }
             })
             .finally(() => {
                 if (!cancelled) {
-                    setLoading(false);
+                    setIsLoadingAlbums(false);
                 }
             });
         return () => {
             cancelled = true;
         };
-    }, [hasPermission, setMediaFiles, setLoading, setError]);
+    }, [hasPermission, setAlbums, setIsLoadingAlbums, setAlbumsError]);
 
-    return { refresh };
+    return { refreshAlbums, openAlbum };
 }

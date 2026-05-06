@@ -3,15 +3,17 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "../components/common/Button";
+import { PermissionModal } from "../components/common/PermissionModal";
 import { SkipSettingsModal } from "../components/common/SkipSettingsModal";
 
 export default function SettingsScreen() {
     const [skipModalVisible, setSkipModalVisible] = useState(false);
+    const [permissionModalVisible, setPermissionModalVisible] = useState(false);
 
     return (
         <SafeAreaView style={styles.container} edges={["top"]}>
             <View style={styles.header}>
-                <Text style={styles.placeholder}>Header (返回 + 設定)</Text>
+                <Text style={styles.headerTitle}>設定</Text>
             </View>
 
             <ScrollView
@@ -27,14 +29,23 @@ export default function SettingsScreen() {
                     />
                 </View>
 
-                <View style={styles.footerNote}>
-                    <Text style={styles.placeholder}>FooterNote (說明文字)</Text>
+                <View style={styles.actionItem}>
+                    <Button
+                        label="權限"
+                        variant="secondary"
+                        fullWidth
+                        onPress={() => setPermissionModalVisible(true)}
+                    />
                 </View>
             </ScrollView>
 
             <SkipSettingsModal
                 visible={skipModalVisible}
                 onClose={() => setSkipModalVisible(false)}
+            />
+            <PermissionModal
+                visible={permissionModalVisible}
+                onClose={() => setPermissionModalVisible(false)}
             />
         </SafeAreaView>
     );
@@ -47,10 +58,15 @@ const styles = StyleSheet.create({
     },
     header: {
         height: 56,
-        paddingHorizontal: 16,
+        paddingHorizontal: 20,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
+    },
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: "600",
+        color: "#111827",
     },
     scroll: {
         flex: 1,
@@ -63,15 +79,5 @@ const styles = StyleSheet.create({
     actionItem: {
         marginHorizontal: 20,
         marginBottom: 12,
-    },
-    footerNote: {
-        marginTop: 16,
-        paddingHorizontal: 32,
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    placeholder: {
-        color: "#9CA3AF",
-        fontSize: 14,
     },
 });

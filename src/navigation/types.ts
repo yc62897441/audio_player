@@ -4,7 +4,6 @@ export type RootTabParamList = {
     Library: undefined;
     Player: undefined;
     Settings: undefined;
-    Permission: undefined;
 };
 
 export type RootTabScreenProps<T extends keyof RootTabParamList> =

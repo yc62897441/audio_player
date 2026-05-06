@@ -212,7 +212,7 @@ function AlbumsTab({
         return (
             <View style={styles.centeredContent}>
                 <Text style={styles.placeholder}>
-                    請先到「權限」分頁授權存取媒體
+                    請至「設定」頁授權存取媒體
                 </Text>
             </View>
         );

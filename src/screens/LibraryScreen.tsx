@@ -12,8 +12,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useMediaLibrary } from "../hooks/useMediaLibrary";
 import { useMediaPermissions } from "../hooks/usePermissions";
 import { useLibraryStore } from "../stores/libraryStore";
-import type { LibraryTab, MediaFile } from "../stores/libraryStore";
+import type { LibraryTab, MediaAlbum, MediaFile } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
+import { useRecentStore } from "../stores/recentStore";
+import type { RecentPlayEntry } from "../stores/recentStore";
 
 function formatDuration(totalSeconds: number): string {
     const sec = Math.max(0, Math.floor(totalSeconds));
@@ -22,24 +24,52 @@ function formatDuration(totalSeconds: number): string {
     return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function formatRelativeTime(timestamp: number): string {
+    const diffSec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    if (diffSec < 60) {
+        return "剛剛";
+    }
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) {
+        return `${diffMin} 分鐘前`;
+    }
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) {
+        return `${diffHour} 小時前`;
+    }
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 7) {
+        return `${diffDay} 天前`;
+    }
+    const date = new Date(timestamp);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+}
+
 export default function LibraryScreen() {
     useMediaPermissions();
-    useMediaLibrary();
-
+    const { openAlbum } = useMediaLibrary();
     const navigation = useNavigation();
+
     const hasPermission = useLibraryStore((s) => s.hasPermission);
-    const isLoading = useLibraryStore((s) => s.isLoading);
-    const error = useLibraryStore((s) => s.error);
-    const videos = useLibraryStore((s) => s.videos);
-    const audios = useLibraryStore((s) => s.audios);
     const activeTab = useLibraryStore((s) => s.activeTab);
     const setActiveTab = useLibraryStore((s) => s.setActiveTab);
+    const albums = useLibraryStore((s) => s.albums);
+    const isLoadingAlbums = useLibraryStore((s) => s.isLoadingAlbums);
+    const albumsError = useLibraryStore((s) => s.albumsError);
+    const selectedAlbum = useLibraryStore((s) => s.selectedAlbum);
+    const albumFiles = useLibraryStore((s) => s.albumFiles);
+    const isLoadingAlbumFiles = useLibraryStore((s) => s.isLoadingAlbumFiles);
+    const albumFilesError = useLibraryStore((s) => s.albumFilesError);
+    const selectAlbum = useLibraryStore((s) => s.selectAlbum);
+
+    const recentEntries = useRecentStore((s) => s.entries);
     const playFile = usePlayerStore((s) => s.playFile);
 
-    const list = activeTab === "video" ? videos : audios;
-
-    const handleTap = (file: MediaFile) => {
-        playFile(file, list);
+    const handlePlay = (file: MediaFile, playlist: MediaFile[]) => {
+        playFile(file, playlist);
         navigation.navigate("Player" as never);
     };
 
@@ -51,28 +81,40 @@ export default function LibraryScreen() {
 
             <View style={styles.tabs}>
                 <TabButton
-                    label={`影片 (${videos.length})`}
-                    active={activeTab === "video"}
-                    onPress={() => setActiveTab("video")}
+                    label={`最近播放 (${recentEntries.length})`}
+                    active={activeTab === "recent"}
+                    onPress={() => setActiveTab("recent")}
                 />
                 <TabButton
-                    label={`音樂 (${audios.length})`}
-                    active={activeTab === "audio"}
-                    onPress={() => setActiveTab("audio")}
+                    label={`資料夾 (${albums.length})`}
+                    active={activeTab === "albums"}
+                    onPress={() => setActiveTab("albums")}
                 />
             </View>
 
             <View style={styles.divider} />
 
             <View style={styles.scroll}>
-                <ContentArea
-                    hasPermission={hasPermission}
-                    isLoading={isLoading}
-                    error={error}
-                    list={list}
-                    activeTab={activeTab}
-                    onTap={handleTap}
-                />
+                {activeTab === "recent" ? (
+                    <RecentTab
+                        entries={recentEntries}
+                        onPlay={handlePlay}
+                    />
+                ) : (
+                    <AlbumsTab
+                        hasPermission={hasPermission}
+                        albums={albums}
+                        isLoadingAlbums={isLoadingAlbums}
+                        albumsError={albumsError}
+                        selectedAlbum={selectedAlbum}
+                        albumFiles={albumFiles}
+                        isLoadingAlbumFiles={isLoadingAlbumFiles}
+                        albumFilesError={albumFilesError}
+                        onOpenAlbum={openAlbum}
+                        onBackToAlbums={() => selectAlbum(null)}
+                        onPlay={handlePlay}
+                    />
+                )}
             </View>
         </SafeAreaView>
     );
@@ -102,23 +144,68 @@ function TabButton({ label, active, onPress }: TabButtonProps) {
     );
 }
 
-interface ContentAreaProps {
-    hasPermission: boolean;
-    isLoading: boolean;
-    error: string | null;
-    list: MediaFile[];
-    activeTab: LibraryTab;
-    onTap: (file: MediaFile) => void;
+interface RecentTabProps {
+    entries: RecentPlayEntry[];
+    onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
 }
 
-function ContentArea({
+function RecentTab({ entries, onPlay }: RecentTabProps) {
+    if (entries.length === 0) {
+        return (
+            <View style={styles.centeredContent}>
+                <Text style={styles.placeholder}>
+                    尚無播放紀錄
+                </Text>
+                <Text style={styles.placeholderSub}>
+                    請至「資料夾」分頁挑選檔案播放
+                </Text>
+            </View>
+        );
+    }
+    const playlist = entries.map((entry) => entry.file);
+    return (
+        <FlatList
+            data={entries}
+            keyExtractor={(item) => item.file.id}
+            renderItem={({ item }) => (
+                <FileRow
+                    file={item.file}
+                    sub={`${item.file.type === "video" ? "影片" : "音樂"} · ${formatRelativeTime(item.lastPlayedAt)}`}
+                    onPress={() => onPlay(item.file, playlist)}
+                />
+            )}
+            ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+        />
+    );
+}
+
+interface AlbumsTabProps {
+    hasPermission: boolean;
+    albums: MediaAlbum[];
+    isLoadingAlbums: boolean;
+    albumsError: string | null;
+    selectedAlbum: MediaAlbum | null;
+    albumFiles: MediaFile[];
+    isLoadingAlbumFiles: boolean;
+    albumFilesError: string | null;
+    onOpenAlbum: (album: MediaAlbum) => void;
+    onBackToAlbums: () => void;
+    onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
+}
+
+function AlbumsTab({
     hasPermission,
-    isLoading,
-    error,
-    list,
-    activeTab,
-    onTap,
-}: ContentAreaProps) {
+    albums,
+    isLoadingAlbums,
+    albumsError,
+    selectedAlbum,
+    albumFiles,
+    isLoadingAlbumFiles,
+    albumFilesError,
+    onOpenAlbum,
+    onBackToAlbums,
+    onPlay,
+}: AlbumsTabProps) {
     if (!hasPermission) {
         return (
             <View style={styles.centeredContent}>
@@ -128,11 +215,100 @@ function ContentArea({
             </View>
         );
     }
+
+    if (selectedAlbum) {
+        return (
+            <View style={styles.tabContent}>
+                <Pressable
+                    style={({ pressed }) => [
+                        styles.backRow,
+                        pressed && styles.backRowPressed,
+                    ]}
+                    onPress={onBackToAlbums}
+                >
+                    <Text style={styles.backArrow}>‹</Text>
+                    <Text style={styles.backTitle} numberOfLines={1}>
+                        {selectedAlbum.title}
+                    </Text>
+                </Pressable>
+                <View style={styles.divider} />
+                <AlbumFilesContent
+                    isLoading={isLoadingAlbumFiles}
+                    error={albumFilesError}
+                    files={albumFiles}
+                    onPlay={onPlay}
+                />
+            </View>
+        );
+    }
+
+    if (isLoadingAlbums) {
+        return (
+            <View style={styles.centeredContent}>
+                <ActivityIndicator />
+                <Text style={styles.placeholder}>讀取資料夾中...</Text>
+            </View>
+        );
+    }
+    if (albumsError) {
+        return (
+            <View style={styles.centeredContent}>
+                <Text style={styles.errorText}>讀取錯誤: {albumsError}</Text>
+            </View>
+        );
+    }
+    if (albums.length === 0) {
+        return (
+            <View style={styles.centeredContent}>
+                <Text style={styles.placeholder}>
+                    沒有任何含影片或音樂的資料夾
+                </Text>
+            </View>
+        );
+    }
+    return (
+        <FlatList
+            data={albums}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+                <Pressable
+                    style={({ pressed }) => [
+                        styles.fileItem,
+                        pressed && styles.fileItemPressed,
+                    ]}
+                    onPress={() => onOpenAlbum(item)}
+                >
+                    <Text style={styles.fileName} numberOfLines={1}>
+                        📁 {item.title}
+                    </Text>
+                    <Text style={styles.fileMeta}>
+                        {item.mediaCount} 個檔案
+                    </Text>
+                </Pressable>
+            )}
+            ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+        />
+    );
+}
+
+interface AlbumFilesContentProps {
+    isLoading: boolean;
+    error: string | null;
+    files: MediaFile[];
+    onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
+}
+
+function AlbumFilesContent({
+    isLoading,
+    error,
+    files,
+    onPlay,
+}: AlbumFilesContentProps) {
     if (isLoading) {
         return (
             <View style={styles.centeredContent}>
                 <ActivityIndicator />
-                <Text style={styles.placeholder}>讀取中...</Text>
+                <Text style={styles.placeholder}>讀取檔案中...</Text>
             </View>
         );
     }
@@ -143,37 +319,51 @@ function ContentArea({
             </View>
         );
     }
-    if (list.length === 0) {
+    if (files.length === 0) {
         return (
             <View style={styles.centeredContent}>
                 <Text style={styles.placeholder}>
-                    沒有任何{activeTab === "video" ? "影片" : "音樂"}檔案
+                    這個資料夾沒有影片或音樂
                 </Text>
             </View>
         );
     }
     return (
         <FlatList
-            data={list}
+            data={files}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-                <Pressable
-                    style={({ pressed }) => [
-                        styles.fileItem,
-                        pressed && styles.fileItemPressed,
-                    ]}
-                    onPress={() => onTap(item)}
-                >
-                    <Text style={styles.fileName} numberOfLines={1}>
-                        {item.filename}
-                    </Text>
-                    <Text style={styles.fileMeta}>
-                        {item.format} · {formatDuration(item.duration)}
-                    </Text>
-                </Pressable>
+                <FileRow
+                    file={item}
+                    sub={`${item.type === "video" ? "影片" : "音樂"} · ${item.format} · ${formatDuration(item.duration)}`}
+                    onPress={() => onPlay(item, files)}
+                />
             )}
             ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
         />
+    );
+}
+
+interface FileRowProps {
+    file: MediaFile;
+    sub: string;
+    onPress: () => void;
+}
+
+function FileRow({ file, sub, onPress }: FileRowProps) {
+    return (
+        <Pressable
+            style={({ pressed }) => [
+                styles.fileItem,
+                pressed && styles.fileItemPressed,
+            ]}
+            onPress={onPress}
+        >
+            <Text style={styles.fileName} numberOfLines={1}>
+                {file.type === "video" ? "🎬" : "🎵"} {file.filename}
+            </Text>
+            <Text style={styles.fileMeta}>{sub}</Text>
+        </Pressable>
     );
 }
 
@@ -225,6 +415,30 @@ const styles = StyleSheet.create({
     scroll: {
         flex: 1,
     },
+    tabContent: {
+        flex: 1,
+    },
+    backRow: {
+        height: 44,
+        paddingHorizontal: 16,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    backRowPressed: {
+        backgroundColor: "#F3F4F6",
+    },
+    backArrow: {
+        fontSize: 24,
+        color: "#2663EB",
+        lineHeight: 24,
+    },
+    backTitle: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: "600",
+        color: "#111827",
+    },
     centeredContent: {
         flex: 1,
         alignItems: "center",
@@ -256,6 +470,10 @@ const styles = StyleSheet.create({
     placeholder: {
         color: "#9CA3AF",
         fontSize: 14,
+    },
+    placeholderSub: {
+        color: "#9CA3AF",
+        fontSize: 12,
     },
     errorText: {
         color: "#DC2626",

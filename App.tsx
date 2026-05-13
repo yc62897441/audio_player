@@ -2,6 +2,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { ToastOverlay } from "./src/components/common/Toast";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
 export default function App() {
@@ -11,6 +12,7 @@ export default function App() {
                 <RootNavigator />
                 <StatusBar style="auto" />
             </NavigationContainer>
+            <ToastOverlay />
         </SafeAreaProvider>
     );
 }

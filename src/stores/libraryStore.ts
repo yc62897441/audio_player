@@ -19,7 +19,7 @@ export interface MediaAlbum {
     mediaCount: number;
 }
 
-export type LibraryTab = "recent" | "albums";
+export type LibraryTab = "recent" | "albums" | "playlists";
 
 interface LibraryState {
     activeTab: LibraryTab;
@@ -31,6 +31,7 @@ interface LibraryState {
     albumFiles: MediaFile[];
     isLoadingAlbumFiles: boolean;
     albumFilesError: string | null;
+    selectedPlaylistId: string | null;
     setActiveTab: (tab: LibraryTab) => void;
     setHasPermission: (hasPermission: boolean) => void;
     setAlbums: (albums: MediaAlbum[]) => void;
@@ -40,6 +41,7 @@ interface LibraryState {
     setAlbumFiles: (files: MediaFile[]) => void;
     setIsLoadingAlbumFiles: (loading: boolean) => void;
     setAlbumFilesError: (error: string | null) => void;
+    setSelectedPlaylistId: (id: string | null) => void;
 }
 
 export const useLibraryStore = create<LibraryState>((set) => ({
@@ -52,6 +54,7 @@ export const useLibraryStore = create<LibraryState>((set) => ({
     albumFiles: [],
     isLoadingAlbumFiles: false,
     albumFilesError: null,
+    selectedPlaylistId: null,
     setActiveTab: (activeTab) => set({ activeTab }),
     setHasPermission: (hasPermission) => set({ hasPermission }),
     setAlbums: (albums) => set({ albums }),
@@ -64,7 +67,7 @@ export const useLibraryStore = create<LibraryState>((set) => ({
             albumFilesError: null,
         }),
     setAlbumFiles: (albumFiles) => set({ albumFiles }),
-    setIsLoadingAlbumFiles: (isLoadingAlbumFiles) =>
-        set({ isLoadingAlbumFiles }),
+    setIsLoadingAlbumFiles: (isLoadingAlbumFiles) => set({ isLoadingAlbumFiles }),
     setAlbumFilesError: (albumFilesError) => set({ albumFilesError }),
+    setSelectedPlaylistId: (selectedPlaylistId) => set({ selectedPlaylistId }),
 }));

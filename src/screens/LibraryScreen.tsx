@@ -1,6 +1,8 @@
 import { useNavigation } from "@react-navigation/native";
+import { useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     FlatList,
     Image,
     Pressable,
@@ -10,14 +12,32 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AddToPlaylistModal } from "../components/library/AddToPlaylistModal";
+import { CreatePlaylistModal } from "../components/library/CreatePlaylistModal";
+import { FileActionSheet } from "../components/library/FileActionSheet";
+import { PlaylistActionSheet } from "../components/library/PlaylistActionSheet";
+import { RenamePlaylistModal } from "../components/library/RenamePlaylistModal";
+import { Button } from "../components/common/Button";
+import { showToast } from "../components/common/Toast";
 import { useMediaLibrary } from "../hooks/useMediaLibrary";
 import { useMediaPermissions } from "../hooks/usePermissions";
+import { usePlaylistFiles } from "../hooks/usePlaylistFiles";
 import { useVideoThumbnail } from "../hooks/useVideoThumbnail";
 import { useLibraryStore } from "../stores/libraryStore";
-import type { LibraryTab, MediaAlbum, MediaFile } from "../stores/libraryStore";
+import type { MediaAlbum, MediaFile } from "../stores/libraryStore";
 import { usePlayerStore } from "../stores/playerStore";
+import { usePlaylistStore } from "../stores/playlistStore";
+import type { Playlist } from "../stores/playlistStore";
 import { useRecentStore } from "../stores/recentStore";
 import type { RecentPlayEntry } from "../stores/recentStore";
+
+type OpenModal = "action-sheet" | "picker" | "create" | "playlist-action-sheet" | "rename" | null;
+
+interface PendingFile {
+    file: MediaFile;
+    sourcePlaylistId: string | null;
+    fromRecent: boolean;
+}
 
 function formatDuration(totalSeconds: number): string {
     const sec = Math.max(0, Math.floor(totalSeconds));
@@ -66,14 +86,158 @@ export default function LibraryScreen() {
     const isLoadingAlbumFiles = useLibraryStore((s) => s.isLoadingAlbumFiles);
     const albumFilesError = useLibraryStore((s) => s.albumFilesError);
     const selectAlbum = useLibraryStore((s) => s.selectAlbum);
+    const selectedPlaylistId = useLibraryStore((s) => s.selectedPlaylistId);
+    const setSelectedPlaylistId = useLibraryStore((s) => s.setSelectedPlaylistId);
 
     const recentEntries = useRecentStore((s) => s.entries);
+    const removeRecent = useRecentStore((s) => s.remove);
+    const clearRecent = useRecentStore((s) => s.clear);
     const playFile = usePlayerStore((s) => s.playFile);
+
+    const playlists = usePlaylistStore((s) => s.playlists);
+    const createPlaylist = usePlaylistStore((s) => s.createPlaylist);
+    const addItem = usePlaylistStore((s) => s.addItem);
+    const removeItem = usePlaylistStore((s) => s.removeItem);
+    const deletePlaylist = usePlaylistStore((s) => s.deletePlaylist);
+    const renamePlaylist = usePlaylistStore((s) => s.renamePlaylist);
+
+    const [openModal, setOpenModal] = useState<OpenModal>(null);
+    const [pending, setPending] = useState<PendingFile | null>(null);
+    const [pendingPlaylist, setPendingPlaylist] = useState<Playlist | null>(null);
 
     const handlePlay = (file: MediaFile, playlist: MediaFile[]) => {
         playFile(file, playlist);
         navigation.navigate("Player" as never);
     };
+
+    const handleLongPressFile = (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => {
+        setPending({ file, sourcePlaylistId, fromRecent });
+        setOpenModal("action-sheet");
+    };
+
+    const handleCloseAll = () => {
+        setOpenModal(null);
+        setPending(null);
+        setPendingPlaylist(null);
+    };
+
+    const handleActionSheetAddToPlaylist = () => {
+        setOpenModal("picker");
+    };
+
+    const handleRemoveFromPlaylist = () => {
+        if (!pending || !pending.sourcePlaylistId) {
+            handleCloseAll();
+            return;
+        }
+        const playlist = playlists.find((p) => p.id === pending.sourcePlaylistId);
+        removeItem(pending.sourcePlaylistId, pending.file.id);
+        showToast(`已自「${playlist?.name ?? "播放清單"}」移除`);
+        handleCloseAll();
+    };
+
+    const handleRemoveFromRecent = () => {
+        if (!pending) {
+            handleCloseAll();
+            return;
+        }
+        removeRecent(pending.file.id);
+        showToast("已自最近播放移除");
+        handleCloseAll();
+    };
+
+    const handleClearRecent = () => {
+        Alert.alert("清空最近播放", "確定要清空整個最近播放紀錄?", [
+            { text: "取消", style: "cancel" },
+            {
+                text: "清空",
+                style: "destructive",
+                onPress: () => {
+                    clearRecent();
+                    showToast("已清空最近播放");
+                    handleCloseAll();
+                },
+            },
+        ]);
+    };
+
+    const handlePickerPick = (playlistId: string) => {
+        if (pending) {
+            const playlist = playlists.find((p) => p.id === playlistId);
+            const result = addItem(playlistId, pending.file.id);
+            if (result === "added") {
+                showToast(`已加入「${playlist?.name ?? "播放清單"}」`);
+            } else if (result === "duplicate") {
+                showToast(`已在「${playlist?.name ?? "播放清單"}」中`);
+            }
+        }
+        handleCloseAll();
+    };
+
+    const handlePickerCreateNew = () => {
+        setOpenModal("create");
+    };
+
+    const handleStandaloneCreate = () => {
+        setPending(null);
+        setOpenModal("create");
+    };
+
+    const handleCreateConfirm = (name: string) => {
+        const id = createPlaylist(name);
+        if (pending) {
+            addItem(id, pending.file.id);
+            showToast(`已加入「${name}」`);
+        } else {
+            showToast(`已建立「${name}」`);
+        }
+        handleCloseAll();
+    };
+
+    const handleLongPressPlaylist = (playlist: Playlist) => {
+        setPendingPlaylist(playlist);
+        setOpenModal("playlist-action-sheet");
+    };
+
+    const handleRenameSheetTap = () => {
+        setOpenModal("rename");
+    };
+
+    const handleDeleteSheetTap = () => {
+        if (!pendingPlaylist) return;
+        const target = pendingPlaylist;
+        Alert.alert("刪除播放清單", `確定要刪除「${target.name}」?清單內的媒體檔案不會被刪除。`, [
+            { text: "取消", style: "cancel" },
+            {
+                text: "刪除",
+                style: "destructive",
+                onPress: () => {
+                    if (selectedPlaylistId === target.id) {
+                        setSelectedPlaylistId(null);
+                    }
+                    deletePlaylist(target.id);
+                    showToast(`已刪除「${target.name}」`);
+                    handleCloseAll();
+                },
+            },
+        ]);
+    };
+
+    const handleRenameConfirm = (name: string) => {
+        if (pendingPlaylist) {
+            renamePlaylist(pendingPlaylist.id, name);
+            showToast(`已更名為「${name}」`);
+        }
+        handleCloseAll();
+    };
+
+    const selectedPlaylist = selectedPlaylistId
+        ? (playlists.find((p) => p.id === selectedPlaylistId) ?? null)
+        : null;
 
     return (
         <SafeAreaView style={styles.container} edges={["top"]}>
@@ -92,14 +256,24 @@ export default function LibraryScreen() {
                     active={activeTab === "albums"}
                     onPress={() => setActiveTab("albums")}
                 />
+                <TabButton
+                    label={`播放清單 (${playlists.length})`}
+                    active={activeTab === "playlists"}
+                    onPress={() => setActiveTab("playlists")}
+                />
             </View>
 
             <View style={styles.divider} />
 
             <View style={styles.scroll}>
-                {activeTab === "recent" ? (
-                    <RecentTab entries={recentEntries} onPlay={handlePlay} />
-                ) : (
+                {activeTab === "recent" && (
+                    <RecentTab
+                        entries={recentEntries}
+                        onPlay={handlePlay}
+                        onLongPressFile={handleLongPressFile}
+                    />
+                )}
+                {activeTab === "albums" && (
                     <AlbumsTab
                         hasPermission={hasPermission}
                         albums={albums}
@@ -112,9 +286,59 @@ export default function LibraryScreen() {
                         onOpenAlbum={openAlbum}
                         onBackToAlbums={() => selectAlbum(null)}
                         onPlay={handlePlay}
+                        onLongPressFile={handleLongPressFile}
+                    />
+                )}
+                {activeTab === "playlists" && (
+                    <PlaylistsTab
+                        playlists={playlists}
+                        selectedPlaylist={selectedPlaylist}
+                        onOpenPlaylist={(p) => setSelectedPlaylistId(p.id)}
+                        onBack={() => setSelectedPlaylistId(null)}
+                        onPlay={handlePlay}
+                        onLongPressFile={handleLongPressFile}
+                        onLongPressPlaylist={handleLongPressPlaylist}
+                        onCreate={handleStandaloneCreate}
                     />
                 )}
             </View>
+
+            <FileActionSheet
+                visible={openModal === "action-sheet"}
+                file={pending?.file ?? null}
+                onClose={handleCloseAll}
+                onAddToPlaylist={handleActionSheetAddToPlaylist}
+                onRemoveFromPlaylist={
+                    pending?.sourcePlaylistId ? handleRemoveFromPlaylist : undefined
+                }
+                onRemoveFromRecent={pending?.fromRecent ? handleRemoveFromRecent : undefined}
+                onClearRecent={pending?.fromRecent ? handleClearRecent : undefined}
+            />
+            <AddToPlaylistModal
+                visible={openModal === "picker"}
+                playlists={playlists}
+                onClose={handleCloseAll}
+                onPick={handlePickerPick}
+                onCreateNew={handlePickerCreateNew}
+            />
+            <CreatePlaylistModal
+                visible={openModal === "create"}
+                onClose={handleCloseAll}
+                onConfirm={handleCreateConfirm}
+            />
+            <PlaylistActionSheet
+                visible={openModal === "playlist-action-sheet"}
+                playlist={pendingPlaylist}
+                onClose={handleCloseAll}
+                onRename={handleRenameSheetTap}
+                onDelete={handleDeleteSheetTap}
+            />
+            <RenamePlaylistModal
+                visible={openModal === "rename"}
+                playlist={pendingPlaylist}
+                onClose={handleCloseAll}
+                onConfirm={handleRenameConfirm}
+            />
         </SafeAreaView>
     );
 }
@@ -127,16 +351,8 @@ interface TabButtonProps {
 
 function TabButton({ label, active, onPress }: TabButtonProps) {
     return (
-        <Pressable
-            style={[styles.tabButton, active && styles.tabButtonActive]}
-            onPress={onPress}
-        >
-            <Text
-                style={[
-                    styles.tabButtonText,
-                    active && styles.tabButtonTextActive,
-                ]}
-            >
+        <Pressable style={[styles.tabButton, active && styles.tabButtonActive]} onPress={onPress}>
+            <Text style={[styles.tabButtonText, active && styles.tabButtonTextActive]}>
                 {label}
             </Text>
         </Pressable>
@@ -146,16 +362,19 @@ function TabButton({ label, active, onPress }: TabButtonProps) {
 interface RecentTabProps {
     entries: RecentPlayEntry[];
     onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
+    onLongPressFile: (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => void;
 }
 
-function RecentTab({ entries, onPlay }: RecentTabProps) {
+function RecentTab({ entries, onPlay, onLongPressFile }: RecentTabProps) {
     if (entries.length === 0) {
         return (
             <View style={styles.centeredContent}>
                 <Text style={styles.placeholder}>尚無播放紀錄</Text>
-                <Text style={styles.placeholderSub}>
-                    請至「資料夾」分頁挑選檔案播放
-                </Text>
+                <Text style={styles.placeholderSub}>請至「資料夾」分頁挑選檔案播放</Text>
             </View>
         );
     }
@@ -169,6 +388,7 @@ function RecentTab({ entries, onPlay }: RecentTabProps) {
                     file={item.file}
                     sub={`${item.file.type === "video" ? "影片" : "音樂"} · ${formatRelativeTime(item.lastPlayedAt)}`}
                     onPress={() => onPlay(item.file, playlist)}
+                    onLongPress={() => onLongPressFile(item.file, null, true)}
                 />
             )}
             ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
@@ -188,6 +408,11 @@ interface AlbumsTabProps {
     onOpenAlbum: (album: MediaAlbum) => void;
     onBackToAlbums: () => void;
     onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
+    onLongPressFile: (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => void;
 }
 
 function AlbumsTab({
@@ -202,13 +427,12 @@ function AlbumsTab({
     onOpenAlbum,
     onBackToAlbums,
     onPlay,
+    onLongPressFile,
 }: AlbumsTabProps) {
     if (!hasPermission) {
         return (
             <View style={styles.centeredContent}>
-                <Text style={styles.placeholder}>
-                    請至「設定」頁授權存取媒體
-                </Text>
+                <Text style={styles.placeholder}>請至「設定」頁授權存取媒體</Text>
             </View>
         );
     }
@@ -216,24 +440,14 @@ function AlbumsTab({
     if (selectedAlbum) {
         return (
             <View style={styles.tabContent}>
-                <Pressable
-                    style={({ pressed }) => [
-                        styles.backRow,
-                        pressed && styles.backRowPressed,
-                    ]}
-                    onPress={onBackToAlbums}
-                >
-                    <Text style={styles.backArrow}>‹</Text>
-                    <Text style={styles.backTitle} numberOfLines={1}>
-                        {selectedAlbum.title}
-                    </Text>
-                </Pressable>
+                <BackRow title={selectedAlbum.title} onPress={onBackToAlbums} />
                 <View style={styles.divider} />
                 <AlbumFilesContent
                     isLoading={isLoadingAlbumFiles}
                     error={albumFilesError}
                     files={albumFiles}
                     onPlay={onPlay}
+                    onLongPressFile={onLongPressFile}
                 />
             </View>
         );
@@ -257,9 +471,7 @@ function AlbumsTab({
     if (albums.length === 0) {
         return (
             <View style={styles.centeredContent}>
-                <Text style={styles.placeholder}>
-                    沒有任何含影片或音樂的資料夾
-                </Text>
+                <Text style={styles.placeholder}>沒有任何含影片或音樂的資料夾</Text>
             </View>
         );
     }
@@ -269,18 +481,13 @@ function AlbumsTab({
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
                 <Pressable
-                    style={({ pressed }) => [
-                        styles.fileItem,
-                        pressed && styles.fileItemPressed,
-                    ]}
+                    style={({ pressed }) => [styles.fileItem, pressed && styles.fileItemPressed]}
                     onPress={() => onOpenAlbum(item)}
                 >
                     <Text style={styles.fileName} numberOfLines={1}>
                         📁 {item.title}
                     </Text>
-                    <Text style={styles.fileMeta}>
-                        {item.mediaCount} 個檔案
-                    </Text>
+                    <Text style={styles.fileMeta}>{item.mediaCount} 個檔案</Text>
                 </Pressable>
             )}
             ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
@@ -293,6 +500,11 @@ interface AlbumFilesContentProps {
     error: string | null;
     files: MediaFile[];
     onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
+    onLongPressFile: (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => void;
 }
 
 function AlbumFilesContent({
@@ -300,6 +512,7 @@ function AlbumFilesContent({
     error,
     files,
     onPlay,
+    onLongPressFile,
 }: AlbumFilesContentProps) {
     if (isLoading) {
         return (
@@ -332,6 +545,7 @@ function AlbumFilesContent({
                     file={item}
                     sub={`${item.type === "video" ? "影片" : "音樂"} · ${item.format} · ${formatDuration(item.duration)}`}
                     onPress={() => onPlay(item, files)}
+                    onLongPress={() => onLongPressFile(item, null, false)}
                 />
             )}
             ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
@@ -339,20 +553,190 @@ function AlbumFilesContent({
     );
 }
 
+interface PlaylistsTabProps {
+    playlists: Playlist[];
+    selectedPlaylist: Playlist | null;
+    onOpenPlaylist: (playlist: Playlist) => void;
+    onBack: () => void;
+    onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
+    onLongPressFile: (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => void;
+    onLongPressPlaylist: (playlist: Playlist) => void;
+    onCreate: () => void;
+}
+
+function PlaylistsTab({
+    playlists,
+    selectedPlaylist,
+    onOpenPlaylist,
+    onBack,
+    onPlay,
+    onLongPressFile,
+    onLongPressPlaylist,
+    onCreate,
+}: PlaylistsTabProps) {
+    if (selectedPlaylist) {
+        return (
+            <View style={styles.tabContent}>
+                <BackRow title={selectedPlaylist.name} onPress={onBack} />
+                <View style={styles.divider} />
+                <PlaylistContents
+                    playlist={selectedPlaylist}
+                    onPlay={onPlay}
+                    onLongPressFile={onLongPressFile}
+                />
+            </View>
+        );
+    }
+
+    const sorted = [...playlists].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+
+    if (sorted.length === 0) {
+        return (
+            <View style={styles.centeredContent}>
+                <Text style={styles.placeholder}>還沒有播放清單</Text>
+                <View style={styles.emptyCta}>
+                    <Button label="建立新的播放清單" onPress={onCreate} fullWidth />
+                </View>
+            </View>
+        );
+    }
+
+    return (
+        <FlatList
+            data={sorted}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+                <Pressable
+                    style={({ pressed }) => [styles.fileItem, pressed && styles.fileItemPressed]}
+                    onPress={() => onOpenPlaylist(item)}
+                    onLongPress={() => onLongPressPlaylist(item)}
+                    delayLongPress={350}
+                >
+                    <Text style={styles.fileName} numberOfLines={1}>
+                        🎵 {item.name}
+                    </Text>
+                    <Text style={styles.fileMeta}>{item.itemIds.length} 首</Text>
+                </Pressable>
+            )}
+            ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+            ListFooterComponent={
+                <View style={styles.listFooter}>
+                    <Button
+                        label="建立新的播放清單"
+                        variant="secondary"
+                        onPress={onCreate}
+                        fullWidth
+                    />
+                </View>
+            }
+        />
+    );
+}
+
+interface PlaylistContentsProps {
+    playlist: Playlist;
+    onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
+    onLongPressFile: (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => void;
+}
+
+function PlaylistContents({ playlist, onPlay, onLongPressFile }: PlaylistContentsProps) {
+    const { files, missingCount, isLoading, error } = usePlaylistFiles(playlist.itemIds);
+
+    if (isLoading) {
+        return (
+            <View style={styles.centeredContent}>
+                <ActivityIndicator />
+                <Text style={styles.placeholder}>讀取檔案中...</Text>
+            </View>
+        );
+    }
+    if (error) {
+        return (
+            <View style={styles.centeredContent}>
+                <Text style={styles.errorText}>讀取錯誤: {error}</Text>
+            </View>
+        );
+    }
+    if (playlist.itemIds.length === 0) {
+        return (
+            <View style={styles.centeredContent}>
+                <Text style={styles.placeholder}>這個播放清單還沒有檔案</Text>
+                <Text style={styles.placeholderSub}>長按媒體檔案 → 加入播放清單</Text>
+            </View>
+        );
+    }
+    if (files.length === 0) {
+        return (
+            <View style={styles.centeredContent}>
+                <Text style={styles.placeholder}>清單中的檔案都已不存在</Text>
+            </View>
+        );
+    }
+    return (
+        <FlatList
+            data={files}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+                <FileRow
+                    file={item}
+                    sub={`${item.type === "video" ? "影片" : "音樂"} · ${item.format} · ${formatDuration(item.duration)}`}
+                    onPress={() => onPlay(item, files)}
+                    onLongPress={() => onLongPressFile(item, playlist.id, false)}
+                />
+            )}
+            ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+            ListHeaderComponent={
+                missingCount > 0 ? (
+                    <View style={styles.missingNote}>
+                        <Text style={styles.missingText}>{missingCount} 個檔案已遺失,不會顯示</Text>
+                    </View>
+                ) : null
+            }
+        />
+    );
+}
+
+interface BackRowProps {
+    title: string;
+    onPress: () => void;
+}
+
+function BackRow({ title, onPress }: BackRowProps) {
+    return (
+        <Pressable
+            style={({ pressed }) => [styles.backRow, pressed && styles.backRowPressed]}
+            onPress={onPress}
+        >
+            <Text style={styles.backArrow}>‹</Text>
+            <Text style={styles.backTitle} numberOfLines={1}>
+                {title}
+            </Text>
+        </Pressable>
+    );
+}
+
 interface FileRowProps {
     file: MediaFile;
     sub: string;
     onPress: () => void;
+    onLongPress?: () => void;
 }
 
-function FileRow({ file, sub, onPress }: FileRowProps) {
+function FileRow({ file, sub, onPress, onLongPress }: FileRowProps) {
     return (
         <Pressable
-            style={({ pressed }) => [
-                styles.fileItem,
-                pressed && styles.fileItemPressed,
-            ]}
+            style={({ pressed }) => [styles.fileItem, pressed && styles.fileItemPressed]}
             onPress={onPress}
+            onLongPress={onLongPress}
+            delayLongPress={350}
         >
             <FileThumbnail file={file} />
             <View style={styles.fileTextCol}>
@@ -370,13 +754,7 @@ function FileThumbnail({ file }: { file: MediaFile }) {
     const thumbUri = useVideoThumbnail(file);
 
     if (isVideo && thumbUri) {
-        return (
-            <Image
-                source={{ uri: thumbUri }}
-                style={styles.thumbnail}
-                resizeMode="cover"
-            />
-        );
+        return <Image source={{ uri: thumbUri }} style={styles.thumbnail} resizeMode="cover" />;
     }
     return (
         <View style={styles.thumbnailPlaceholder}>
@@ -408,18 +786,18 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        gap: 16,
+        gap: 12,
     },
     tabButton: {
         paddingVertical: 8,
-        paddingHorizontal: 12,
+        paddingHorizontal: 10,
         borderRadius: 8,
     },
     tabButtonActive: {
         backgroundColor: "#EFF6FF",
     },
     tabButtonText: {
-        fontSize: 14,
+        fontSize: 13,
         color: "#6B7280",
     },
     tabButtonTextActive: {
@@ -462,7 +840,15 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         padding: 16,
-        gap: 8,
+        gap: 12,
+    },
+    emptyCta: {
+        marginTop: 8,
+        alignSelf: "stretch",
+        paddingHorizontal: 40,
+    },
+    listFooter: {
+        padding: 20,
     },
     fileItem: {
         paddingVertical: 12,
@@ -521,5 +907,14 @@ const styles = StyleSheet.create({
         color: "#DC2626",
         fontSize: 13,
         textAlign: "center",
+    },
+    missingNote: {
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        backgroundColor: "#FEF3C7",
+    },
+    missingText: {
+        fontSize: 12,
+        color: "#92400E",
     },
 });

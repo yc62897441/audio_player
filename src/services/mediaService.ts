@@ -37,10 +37,7 @@ export async function loadAlbums(): Promise<MediaAlbum[]> {
     for (const album of rawAlbums) {
         const probe = await MediaLibrary.getAssetsAsync({
             album: album.id,
-            mediaType: [
-                MediaLibrary.MediaType.video,
-                MediaLibrary.MediaType.audio,
-            ],
+            mediaType: [MediaLibrary.MediaType.video, MediaLibrary.MediaType.audio],
             first: 1,
         });
         if (probe.totalCount > 0) {
@@ -55,6 +52,22 @@ export async function loadAlbums(): Promise<MediaAlbum[]> {
     return result;
 }
 
+export async function loadFilesByIds(ids: string[]): Promise<MediaFile[]> {
+    if (ids.length === 0) return [];
+    const results = await Promise.all(
+        ids.map(async (id) => {
+            try {
+                const info = await MediaLibrary.getAssetInfoAsync(id);
+                if (!info) return null;
+                return toMediaFile(info);
+            } catch {
+                return null;
+            }
+        }),
+    );
+    return results.filter((x): x is MediaFile => x !== null);
+}
+
 export async function loadFilesInAlbum(albumId: string): Promise<MediaFile[]> {
     const all: MediaLibrary.Asset[] = [];
     let cursor: string | undefined;
@@ -62,10 +75,7 @@ export async function loadFilesInAlbum(albumId: string): Promise<MediaFile[]> {
     while (hasNext) {
         const page = await MediaLibrary.getAssetsAsync({
             album: albumId,
-            mediaType: [
-                MediaLibrary.MediaType.video,
-                MediaLibrary.MediaType.audio,
-            ],
+            mediaType: [MediaLibrary.MediaType.video, MediaLibrary.MediaType.audio],
             first: PAGE_SIZE,
             after: cursor,
             sortBy: [[MediaLibrary.SortBy.creationTime, false]],

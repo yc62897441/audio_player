@@ -10,6 +10,8 @@ interface FileActionSheetProps {
     onClose: () => void;
     onAddToPlaylist: () => void;
     onRemoveFromPlaylist?: () => void;
+    onRemoveFromRecent?: () => void;
+    onClearRecent?: () => void;
 }
 
 export function FileActionSheet({
@@ -18,6 +20,8 @@ export function FileActionSheet({
     onClose,
     onAddToPlaylist,
     onRemoveFromPlaylist,
+    onRemoveFromRecent,
+    onClearRecent,
 }: FileActionSheetProps) {
     const insets = useSafeAreaInsets();
     const bottomPadding = Math.max(16, insets.bottom + 8);
@@ -49,6 +53,24 @@ export function FileActionSheet({
                             onPress={onRemoveFromPlaylist}
                         >
                             <Text style={[styles.itemText, styles.dangerText]}>自播放清單移除</Text>
+                        </Pressable>
+                    )}
+                    {onRemoveFromRecent && (
+                        <Pressable
+                            style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
+                            onPress={onRemoveFromRecent}
+                        >
+                            <Text style={[styles.itemText, styles.dangerText]}>自最近播放移除</Text>
+                        </Pressable>
+                    )}
+                    {onClearRecent && (
+                        <Pressable
+                            style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
+                            onPress={onClearRecent}
+                        >
+                            <Text style={[styles.itemText, styles.dangerText]}>
+                                清空整個最近播放
+                            </Text>
                         </Pressable>
                     )}
                 </View>

@@ -36,6 +36,7 @@ type OpenModal = "action-sheet" | "picker" | "create" | "playlist-action-sheet" 
 interface PendingFile {
     file: MediaFile;
     sourcePlaylistId: string | null;
+    fromRecent: boolean;
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -89,6 +90,8 @@ export default function LibraryScreen() {
     const setSelectedPlaylistId = useLibraryStore((s) => s.setSelectedPlaylistId);
 
     const recentEntries = useRecentStore((s) => s.entries);
+    const removeRecent = useRecentStore((s) => s.remove);
+    const clearRecent = useRecentStore((s) => s.clear);
     const playFile = usePlayerStore((s) => s.playFile);
 
     const playlists = usePlaylistStore((s) => s.playlists);
@@ -107,8 +110,12 @@ export default function LibraryScreen() {
         navigation.navigate("Player" as never);
     };
 
-    const handleLongPressFile = (file: MediaFile, sourcePlaylistId: string | null) => {
-        setPending({ file, sourcePlaylistId });
+    const handleLongPressFile = (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => {
+        setPending({ file, sourcePlaylistId, fromRecent });
         setOpenModal("action-sheet");
     };
 
@@ -131,6 +138,31 @@ export default function LibraryScreen() {
         removeItem(pending.sourcePlaylistId, pending.file.id);
         showToast(`已自「${playlist?.name ?? "播放清單"}」移除`);
         handleCloseAll();
+    };
+
+    const handleRemoveFromRecent = () => {
+        if (!pending) {
+            handleCloseAll();
+            return;
+        }
+        removeRecent(pending.file.id);
+        showToast("已自最近播放移除");
+        handleCloseAll();
+    };
+
+    const handleClearRecent = () => {
+        Alert.alert("清空最近播放", "確定要清空整個最近播放紀錄?", [
+            { text: "取消", style: "cancel" },
+            {
+                text: "清空",
+                style: "destructive",
+                onPress: () => {
+                    clearRecent();
+                    showToast("已清空最近播放");
+                    handleCloseAll();
+                },
+            },
+        ]);
     };
 
     const handlePickerPick = (playlistId: string) => {
@@ -279,6 +311,8 @@ export default function LibraryScreen() {
                 onRemoveFromPlaylist={
                     pending?.sourcePlaylistId ? handleRemoveFromPlaylist : undefined
                 }
+                onRemoveFromRecent={pending?.fromRecent ? handleRemoveFromRecent : undefined}
+                onClearRecent={pending?.fromRecent ? handleClearRecent : undefined}
             />
             <AddToPlaylistModal
                 visible={openModal === "picker"}
@@ -328,7 +362,11 @@ function TabButton({ label, active, onPress }: TabButtonProps) {
 interface RecentTabProps {
     entries: RecentPlayEntry[];
     onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
-    onLongPressFile: (file: MediaFile, sourcePlaylistId: string | null) => void;
+    onLongPressFile: (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => void;
 }
 
 function RecentTab({ entries, onPlay, onLongPressFile }: RecentTabProps) {
@@ -350,7 +388,7 @@ function RecentTab({ entries, onPlay, onLongPressFile }: RecentTabProps) {
                     file={item.file}
                     sub={`${item.file.type === "video" ? "影片" : "音樂"} · ${formatRelativeTime(item.lastPlayedAt)}`}
                     onPress={() => onPlay(item.file, playlist)}
-                    onLongPress={() => onLongPressFile(item.file, null)}
+                    onLongPress={() => onLongPressFile(item.file, null, true)}
                 />
             )}
             ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
@@ -370,7 +408,11 @@ interface AlbumsTabProps {
     onOpenAlbum: (album: MediaAlbum) => void;
     onBackToAlbums: () => void;
     onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
-    onLongPressFile: (file: MediaFile, sourcePlaylistId: string | null) => void;
+    onLongPressFile: (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => void;
 }
 
 function AlbumsTab({
@@ -458,7 +500,11 @@ interface AlbumFilesContentProps {
     error: string | null;
     files: MediaFile[];
     onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
-    onLongPressFile: (file: MediaFile, sourcePlaylistId: string | null) => void;
+    onLongPressFile: (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => void;
 }
 
 function AlbumFilesContent({
@@ -499,7 +545,7 @@ function AlbumFilesContent({
                     file={item}
                     sub={`${item.type === "video" ? "影片" : "音樂"} · ${item.format} · ${formatDuration(item.duration)}`}
                     onPress={() => onPlay(item, files)}
-                    onLongPress={() => onLongPressFile(item, null)}
+                    onLongPress={() => onLongPressFile(item, null, false)}
                 />
             )}
             ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
@@ -513,7 +559,11 @@ interface PlaylistsTabProps {
     onOpenPlaylist: (playlist: Playlist) => void;
     onBack: () => void;
     onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
-    onLongPressFile: (file: MediaFile, sourcePlaylistId: string | null) => void;
+    onLongPressFile: (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => void;
     onLongPressPlaylist: (playlist: Playlist) => void;
     onCreate: () => void;
 }
@@ -590,7 +640,11 @@ function PlaylistsTab({
 interface PlaylistContentsProps {
     playlist: Playlist;
     onPlay: (file: MediaFile, playlist: MediaFile[]) => void;
-    onLongPressFile: (file: MediaFile, sourcePlaylistId: string | null) => void;
+    onLongPressFile: (
+        file: MediaFile,
+        sourcePlaylistId: string | null,
+        fromRecent: boolean,
+    ) => void;
 }
 
 function PlaylistContents({ playlist, onPlay, onLongPressFile }: PlaylistContentsProps) {
@@ -635,7 +689,7 @@ function PlaylistContents({ playlist, onPlay, onLongPressFile }: PlaylistContent
                     file={item}
                     sub={`${item.type === "video" ? "影片" : "音樂"} · ${item.format} · ${formatDuration(item.duration)}`}
                     onPress={() => onPlay(item, files)}
-                    onLongPress={() => onLongPressFile(item, playlist.id)}
+                    onLongPress={() => onLongPressFile(item, playlist.id, false)}
                 />
             )}
             ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}

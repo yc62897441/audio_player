@@ -6,12 +6,16 @@ import {
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
+    Repeat,
+    Repeat1,
+    Shuffle,
 } from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { SkipSettingsModal } from "../components/common/SkipSettingsModal";
+import type { LoopMode } from "../stores/settingsStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { usePlayerStore } from "../stores/playerStore";
 import type { MediaFile } from "../stores/libraryStore";
@@ -56,12 +60,7 @@ function Controls({
 
     return (
         <View style={styles.controlsRow}>
-            <ControlButton
-                label="⏮"
-                sublabel="上一首"
-                disabled={!canPrev}
-                onPress={onPrev}
-            />
+            <ControlButton label="⏮" sublabel="上一首" disabled={!canPrev} onPress={onPrev} />
             <SkipButton
                 seconds={skipBackLong}
                 direction="back"
@@ -95,12 +94,7 @@ function Controls({
                 onPress={() => onSkipBy(skipForwardLong)}
                 onLongPress={onOpenSkipSettings}
             />
-            <ControlButton
-                label="⏭"
-                sublabel="下一首"
-                disabled={!canNext}
-                onPress={onNext}
-            />
+            <ControlButton label="⏭" sublabel="下一首" disabled={!canNext} onPress={onNext} />
         </View>
     );
 }
@@ -112,12 +106,7 @@ interface ControlButtonProps {
     onPress: () => void;
 }
 
-function ControlButton({
-    label,
-    sublabel,
-    disabled,
-    onPress,
-}: ControlButtonProps) {
+function ControlButton({ label, sublabel, disabled, onPress }: ControlButtonProps) {
     return (
         <Pressable
             style={({ pressed }) => [
@@ -142,13 +131,7 @@ interface SkipButtonProps {
     onLongPress?: () => void;
 }
 
-function SkipButton({
-    seconds,
-    direction,
-    long,
-    onPress,
-    onLongPress,
-}: SkipButtonProps) {
+function SkipButton({ seconds, direction, long, onPress, onLongPress }: SkipButtonProps) {
     const Icon = long
         ? direction === "back"
             ? ChevronsLeft
@@ -158,10 +141,7 @@ function SkipButton({
           : ChevronRight;
     return (
         <Pressable
-            style={({ pressed }) => [
-                styles.skipButton,
-                pressed && styles.skipButtonPressed,
-            ]}
+            style={({ pressed }) => [styles.skipButton, pressed && styles.skipButtonPressed]}
             onPress={onPress}
             onLongPress={onLongPress}
         >
@@ -181,9 +161,7 @@ function Progress({ position, duration, onSeek }: ProgressProps) {
     const widthRef = useRef(0);
     const durationRef = useRef(duration);
     const draggingPosRef = useRef<number | null>(null);
-    const [draggingPosition, setDraggingPosition] = useState<number | null>(
-        null,
-    );
+    const [draggingPosition, setDraggingPosition] = useState<number | null>(null);
 
     useEffect(() => {
         durationRef.current = duration;
@@ -225,37 +203,57 @@ function Progress({ position, duration, onSeek }: ProgressProps) {
     }, [onSeek]);
 
     const display = draggingPosition ?? position;
-    const ratio =
-        duration > 0 ? Math.min(1, Math.max(0, display / duration)) : 0;
+    const ratio = duration > 0 ? Math.min(1, Math.max(0, display / duration)) : 0;
 
     return (
         <View style={styles.progressContainer}>
-            <View
-                style={styles.progressTouchArea}
-                {...panResponder.panHandlers}
-            >
+            <View style={styles.progressTouchArea} {...panResponder.panHandlers}>
                 <View
                     style={styles.progressBar}
                     onLayout={(e) => {
                         widthRef.current = e.nativeEvent.layout.width;
                     }}
                 >
-                    <View
-                        style={[
-                            styles.progressFill,
-                            { width: `${ratio * 100}%` },
-                        ]}
-                    />
+                    <View style={[styles.progressFill, { width: `${ratio * 100}%` }]} />
                 </View>
             </View>
             <View style={styles.progressLabels}>
-                <Text style={styles.progressLabel}>
-                    {formatDuration(display)}
-                </Text>
-                <Text style={styles.progressLabel}>
-                    {formatDuration(duration)}
-                </Text>
+                <Text style={styles.progressLabel}>{formatDuration(display)}</Text>
+                <Text style={styles.progressLabel}>{formatDuration(duration)}</Text>
             </View>
+        </View>
+    );
+}
+
+interface ModeRowProps {
+    loopMode: LoopMode;
+    shuffleMode: boolean;
+    onCycleLoop: () => void;
+    onToggleShuffle: () => void;
+}
+
+function ModeRow({ loopMode, shuffleMode, onCycleLoop, onToggleShuffle }: ModeRowProps) {
+    const LoopIcon = loopMode === "one" ? Repeat1 : Repeat;
+    const loopColor = loopMode === "none" ? SUBTLE_COLOR : ACTIVE_COLOR;
+    const shuffleColor = shuffleMode ? ACTIVE_COLOR : SUBTLE_COLOR;
+    return (
+        <View style={styles.modeRow}>
+            <Pressable
+                onPress={onCycleLoop}
+                style={({ pressed }) => [styles.modeButton, pressed && styles.modeButtonPressed]}
+                accessibilityRole="button"
+                accessibilityLabel={`循環模式:${loopMode}`}
+            >
+                <LoopIcon color={loopColor} size={22} />
+            </Pressable>
+            <Pressable
+                onPress={onToggleShuffle}
+                style={({ pressed }) => [styles.modeButton, pressed && styles.modeButtonPressed]}
+                accessibilityRole="button"
+                accessibilityLabel={`隨機播放:${shuffleMode ? "開" : "關"}`}
+            >
+                <Shuffle color={shuffleColor} size={22} />
+            </Pressable>
         </View>
     );
 }
@@ -263,6 +261,25 @@ function Progress({ position, duration, onSeek }: ProgressProps) {
 interface AreaProps {
     file: MediaFile;
     onOpenSkipSettings: () => void;
+}
+
+function usePlaybackModeHandlers() {
+    const loopMode = useSettingsStore((s) => s.loopMode);
+    const shuffleMode = useSettingsStore((s) => s.shuffleMode);
+    const cycleLoopMode = useSettingsStore((s) => s.cycleLoopMode);
+    const toggleShuffleMode = useSettingsStore((s) => s.toggleShuffleMode);
+    const applyShuffle = usePlayerStore((s) => s.applyShuffle);
+
+    const handleCycleLoop = useCallback(() => {
+        cycleLoopMode();
+    }, [cycleLoopMode]);
+
+    const handleToggleShuffle = useCallback(() => {
+        const next = toggleShuffleMode();
+        applyShuffle(next);
+    }, [toggleShuffleMode, applyShuffle]);
+
+    return { loopMode, shuffleMode, handleCycleLoop, handleToggleShuffle };
 }
 
 function VideoArea({ file, onOpenSkipSettings }: AreaProps) {
@@ -289,6 +306,8 @@ function VideoArea({ file, onOpenSkipSettings }: AreaProps) {
     const previous = usePlayerStore((s) => s.previous);
     const playlist = usePlayerStore((s) => s.playlist);
     const currentIndex = usePlayerStore((s) => s.currentIndex);
+    const { loopMode, shuffleMode, handleCycleLoop, handleToggleShuffle } =
+        usePlaybackModeHandlers();
 
     useEffect(() => {
         setIsPlaying(playingChange.isPlaying);
@@ -303,6 +322,19 @@ function VideoArea({ file, onOpenSkipSettings }: AreaProps) {
             setDuration(player.duration);
         }
     }, [player.duration, setDuration]);
+
+    useEffect(() => {
+        const sub = player.addListener("playToEnd", () => {
+            const mode = useSettingsStore.getState().loopMode;
+            if (mode === "one") {
+                player.currentTime = 0;
+                player.play();
+            } else {
+                next();
+            }
+        });
+        return () => sub.remove();
+    }, [player, next]);
 
     const handleSkipBy = (seconds: number) => {
         player.seekBy(seconds);
@@ -344,6 +376,13 @@ function VideoArea({ file, onOpenSkipSettings }: AreaProps) {
                 onSeek={handleSeek}
             />
 
+            <ModeRow
+                loopMode={loopMode}
+                shuffleMode={shuffleMode}
+                onCycleLoop={handleCycleLoop}
+                onToggleShuffle={handleToggleShuffle}
+            />
+
             <Controls
                 isPlaying={playingChange.isPlaying}
                 canPrev={currentIndex > 0}
@@ -369,6 +408,10 @@ function AudioArea({ file, onOpenSkipSettings }: AreaProps) {
     const previous = usePlayerStore((s) => s.previous);
     const playlist = usePlayerStore((s) => s.playlist);
     const currentIndex = usePlayerStore((s) => s.currentIndex);
+    const { loopMode, shuffleMode, handleCycleLoop, handleToggleShuffle } =
+        usePlaybackModeHandlers();
+
+    const handledFinishRef = useRef(false);
 
     useEffect(() => {
         player.play();
@@ -388,11 +431,24 @@ function AudioArea({ file, onOpenSkipSettings }: AreaProps) {
         }
     }, [status.duration, setDuration]);
 
+    useEffect(() => {
+        if (!status.didJustFinish) {
+            handledFinishRef.current = false;
+            return;
+        }
+        if (handledFinishRef.current) return;
+        handledFinishRef.current = true;
+        const mode = useSettingsStore.getState().loopMode;
+        if (mode === "one") {
+            player.seekTo(0);
+            player.play();
+        } else {
+            next();
+        }
+    }, [status.didJustFinish, player, next]);
+
     const handleSkipBy = (seconds: number) => {
-        const target = Math.max(
-            0,
-            Math.min(status.duration || 0, status.currentTime + seconds),
-        );
+        const target = Math.max(0, Math.min(status.duration || 0, status.currentTime + seconds));
         player.seekTo(target);
     };
 
@@ -427,6 +483,13 @@ function AudioArea({ file, onOpenSkipSettings }: AreaProps) {
                 onSeek={handleSeek}
             />
 
+            <ModeRow
+                loopMode={loopMode}
+                shuffleMode={shuffleMode}
+                onCycleLoop={handleCycleLoop}
+                onToggleShuffle={handleToggleShuffle}
+            />
+
             <Controls
                 isPlaying={status.playing}
                 canPrev={currentIndex > 0}
@@ -458,12 +521,8 @@ export default function PlayerScreen() {
                 />
             ) : (
                 <View style={styles.emptyBody}>
-                    <Text style={styles.emptyText}>
-                        尚未選擇檔案
-                    </Text>
-                    <Text style={styles.emptyHint}>
-                        請至「媒體庫」分頁挑選一個檔案播放
-                    </Text>
+                    <Text style={styles.emptyText}>尚未選擇檔案</Text>
+                    <Text style={styles.emptyHint}>請至「媒體庫」分頁挑選一個檔案播放</Text>
                 </View>
             )}
 
@@ -477,21 +536,9 @@ export default function PlayerScreen() {
 
 function VideoOrAudio({ file, onOpenSkipSettings }: AreaProps) {
     if (file.type === "video") {
-        return (
-            <VideoArea
-                key={file.id}
-                file={file}
-                onOpenSkipSettings={onOpenSkipSettings}
-            />
-        );
+        return <VideoArea key={file.id} file={file} onOpenSkipSettings={onOpenSkipSettings} />;
     }
-    return (
-        <AudioArea
-            key={file.id}
-            file={file}
-            onOpenSkipSettings={onOpenSkipSettings}
-        />
-    );
+    return <AudioArea key={file.id} file={file} onOpenSkipSettings={onOpenSkipSettings} />;
 }
 
 const styles = StyleSheet.create({
@@ -584,6 +631,23 @@ const styles = StyleSheet.create({
     progressLabel: {
         fontSize: 11,
         color: SUBTLE_COLOR,
+    },
+    modeRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 32,
+        paddingVertical: 4,
+    },
+    modeButton: {
+        width: 40,
+        height: 40,
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: 20,
+    },
+    modeButtonPressed: {
+        backgroundColor: "#F3F4F6",
     },
     controlsRow: {
         flex: 1,

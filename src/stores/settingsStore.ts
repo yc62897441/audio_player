@@ -18,15 +18,30 @@ export const DEFAULT_SKIP_SETTINGS: SkipSettings = {
 
 export const SKIP_SECONDS_RANGE = { min: 1, max: 120 } as const;
 
+export type LoopMode = "none" | "all" | "one";
+
+export const LOOP_MODE_CYCLE: LoopMode[] = ["none", "all", "one"];
+
 const SETTINGS_STORAGE_KEY = "media-player/settings";
 
 type SkipKey = keyof SkipSettings;
 
-interface SettingsState extends SkipSettings {
+interface PlaybackPrefs {
+    loopMode: LoopMode;
+    shuffleMode: boolean;
+}
+
+interface PersistedSettings extends SkipSettings, PlaybackPrefs {}
+
+interface SettingsState extends SkipSettings, PlaybackPrefs {
     setSkipSeconds: (key: SkipKey, value: number) => void;
     incrementSkipSeconds: (key: SkipKey, step?: number) => void;
     decrementSkipSeconds: (key: SkipKey, step?: number) => void;
     resetToDefault: () => void;
+    setLoopMode: (mode: LoopMode) => void;
+    cycleLoopMode: () => LoopMode;
+    setShuffleMode: (on: boolean) => void;
+    toggleShuffleMode: () => boolean;
 }
 
 const clampSkipSeconds = (value: number): number => {
@@ -34,48 +49,54 @@ const clampSkipSeconds = (value: number): number => {
         return SKIP_SECONDS_RANGE.min;
     }
     const rounded = Math.round(value);
-    return Math.min(
-        SKIP_SECONDS_RANGE.max,
-        Math.max(SKIP_SECONDS_RANGE.min, rounded),
-    );
+    return Math.min(SKIP_SECONDS_RANGE.max, Math.max(SKIP_SECONDS_RANGE.min, rounded));
 };
 
 export const useSettingsStore = create<SettingsState>()(
     persist(
         (set, get) => ({
             ...DEFAULT_SKIP_SETTINGS,
+            loopMode: "none",
+            shuffleMode: false,
             setSkipSeconds: (key, value) => {
-                set({ [key]: clampSkipSeconds(value) } as Pick<
-                    SettingsState,
-                    SkipKey
-                >);
+                set({ [key]: clampSkipSeconds(value) } as Pick<SettingsState, SkipKey>);
             },
             incrementSkipSeconds: (key, step = 1) => {
                 const current = get()[key];
-                set({ [key]: clampSkipSeconds(current + step) } as Pick<
-                    SettingsState,
-                    SkipKey
-                >);
+                set({ [key]: clampSkipSeconds(current + step) } as Pick<SettingsState, SkipKey>);
             },
             decrementSkipSeconds: (key, step = 1) => {
                 const current = get()[key];
-                set({ [key]: clampSkipSeconds(current - step) } as Pick<
-                    SettingsState,
-                    SkipKey
-                >);
+                set({ [key]: clampSkipSeconds(current - step) } as Pick<SettingsState, SkipKey>);
             },
             resetToDefault: () => {
                 set({ ...DEFAULT_SKIP_SETTINGS });
+            },
+            setLoopMode: (loopMode) => set({ loopMode }),
+            cycleLoopMode: () => {
+                const current = get().loopMode;
+                const idx = LOOP_MODE_CYCLE.indexOf(current);
+                const next = LOOP_MODE_CYCLE[(idx + 1) % LOOP_MODE_CYCLE.length];
+                set({ loopMode: next });
+                return next;
+            },
+            setShuffleMode: (on) => set({ shuffleMode: on }),
+            toggleShuffleMode: () => {
+                const next = !get().shuffleMode;
+                set({ shuffleMode: next });
+                return next;
             },
         }),
         {
             name: SETTINGS_STORAGE_KEY,
             storage: createJSONStorage(() => AsyncStorage),
-            partialize: (state): SkipSettings => ({
+            partialize: (state): PersistedSettings => ({
                 skipBackLong: state.skipBackLong,
                 skipBackShort: state.skipBackShort,
                 skipForwardShort: state.skipForwardShort,
                 skipForwardLong: state.skipForwardLong,
+                loopMode: state.loopMode,
+                shuffleMode: state.shuffleMode,
             }),
             version: 1,
         },

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "audio_player",
+    "name": "Cue Player",
     "slug": "audio_player",
     "version": "1.0.0",
     "orientation": "portrait",
